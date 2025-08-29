@@ -14,7 +14,7 @@ A simple, secure secret management system built on the proven [age encryption](h
 
 ```bash
 # 1. Download age-store
-curl -O https://raw.githubusercontent.com/username/age-store/main/age-store.py
+curl -O https://raw.githubusercontent.com/itsfarseen/age-store/main/age-store.py
 chmod +x age-store.py
 
 # 2. Initialize yourself as a user
@@ -133,3 +133,7 @@ MASTER_KEY_FILE = Path("master-key.age.enc")
 - `MASTER_KEY_FILE`: Encrypted master key file (default: `master-key.age.enc`)
 
 Simply edit these paths in the script to customize file locations for your project structure.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
