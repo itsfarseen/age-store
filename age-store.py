@@ -200,33 +200,23 @@ def cmd_bootstrap(initial_user: str):
     print(f"Bootstrap complete. Master keypair created for user: {initial_user}")
 
 
-def cmd_add_file(file_path_str: str):
-    """Add a file to the secret store."""
-    file_path = Path(file_path_str)
-
-    if not file_path.exists():
-        print(f"Error: File {file_path} not found")
-        sys.exit(1)
-
-    # Get master private key
+def cmd_add_file(file_paths: list[str]):
+    """Add one or more files to the secret store."""
     master_private_key = get_master_private_key()
-
-    # Get master public key from private key
     master_public_key = get_public_key_from_private(master_private_key)
 
-    # Read file content
-    with open(file_path, "r") as f:
-        content = f.read()
-
-    # Encrypt file with master public key
-    encrypted_content = encrypt_with_age_recipients(content, [master_public_key])
-    secret_file = STORE_DIR / f"{file_path.name}.enc"
-
-    with open(secret_file, "wb") as f:
-        f.write(encrypted_content)
-
-    print(f"File {file_path} added to secret store as {secret_file}")
-
+    for file_path_str in file_paths:
+        file_path = Path(file_path_str)
+        if not file_path.exists():
+            print(f"Error: File {file_path} not found")
+            continue
+        with open(file_path, "r") as f:
+            content = f.read()
+        encrypted_content = encrypt_with_age_recipients(content, [master_public_key])
+        secret_file = STORE_DIR / f"{file_path.name}.enc"
+        with open(secret_file, "wb") as f:
+            f.write(encrypted_content)
+        print(f"File {file_path} added to secret store as {secret_file}")
 
 def cmd_view_file(filename: str):
     """View a file from the secret store."""
@@ -476,9 +466,9 @@ def main():
 
     # Add file command
     add_file_parser = subparsers.add_parser(
-        "add-file", help="Add a file to the secret store"
+        "add-file", help="Add one or more files to the secret store"
     )
-    add_file_parser.add_argument("file", help="Path to the file to add")
+    add_file_parser.add_argument("files", nargs='+', help="Paths to the file to add")
 
     # Admin commands subparser
     admin_parser = subparsers.add_parser("admin", help="Administrative commands")
@@ -540,7 +530,7 @@ def main():
             elif args.admin_command == "list-users":
                 cmd_list_users()
         elif args.command == "add-file":
-            cmd_add_file(args.file)
+            cmd_add_file(args.files)
         elif args.command == "view-file":
             cmd_view_file(args.file)
         elif args.command == "list-files":
