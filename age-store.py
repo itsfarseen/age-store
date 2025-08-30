@@ -248,6 +248,30 @@ def cmd_view_file(filename: str):
         sys.exit(1)
 
 
+def cmd_decrypt_files(files: list[str]):
+    """Decrypt one or more files into ./decrypted folder."""
+    decrypted_dir = Path("decrypted")
+    decrypted_dir.mkdir(exist_ok=True)
+
+    # Get master private key
+    master_private_key = get_master_private_key()
+
+    for f in files:
+        secret_file = STORE_DIR / f"{f}.enc"
+        if not secret_file.exists():
+            print(f"Error: Secret file {secret_file} not found")
+            continue
+
+        try:
+            content = decrypt_with_age_key(secret_file, master_private_key)
+            out_path = decrypted_dir / f
+            with open(out_path, "w") as out:
+                out.write(content)
+            print(f"Decrypted {secret_file} → {out_path}")
+        except RuntimeError as e:
+            print(f"Error decrypting {secret_file}: {e}")
+
+
 def cmd_add_user(username: str, age_pubkey: str):
     """Add a user by adding their age public key to the system."""
     # Check if user already exists in users.json
@@ -279,7 +303,7 @@ def cmd_add_user(username: str, age_pubkey: str):
     save_users_config(users_config)
 
     print(f"User {username} added with access to secrets")
-
+    
 
 def cmd_remove_user(username: str):
     """Remove a user's access to secrets."""
@@ -480,6 +504,12 @@ def main():
     )
     add_file_parser.add_argument("file", help="Path to the file to add")
 
+    # Decrypt command
+    decrypt_parser = subparsers.add_parser(
+        "decrypt", help="Decrypt one or more files to ./decrypted"
+    )
+    decrypt_parser.add_argument("files", nargs="+", help="File(s) to decrypt (without .enc)")
+
     # Admin commands subparser
     admin_parser = subparsers.add_parser("admin", help="Administrative commands")
     admin_subparsers = admin_parser.add_subparsers(
@@ -541,6 +571,8 @@ def main():
                 cmd_list_users()
         elif args.command == "add-file":
             cmd_add_file(args.file)
+        elif args.command == "decrypt":
+            cmd_decrypt_files(args.files)
         elif args.command == "view-file":
             cmd_view_file(args.file)
         elif args.command == "list-files":
@@ -555,7 +587,6 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
