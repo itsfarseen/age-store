@@ -222,6 +222,24 @@ def cmd_add_file(file_path_str: str):
     encrypted_content = encrypt_with_age_recipients(content, [master_public_key])
     secret_file = STORE_DIR / f"{file_path.name}.enc"
 
+    # Check if encrypted file already exists
+    while secret_file.exists():
+        response = input(f"File {secret_file} already exists in store. Overwrite, rename, or skip? [y/N/r]: ").strip().lower()
+        if response == 'y':
+            break  # Proceed to overwrite
+        elif response == 'r':
+            new_name = input(f"Enter new filename (without .enc): ").strip()
+            if not new_name:
+                print("Error: No filename provided, skipping")
+                return
+            secret_file = STORE_DIR / f"{new_name}.enc"
+            if secret_file.exists():
+                print(f"Error: File {secret_file} already exists, try again")
+                continue
+        else:  # Default to 'n' or any other input
+            print(f"Skipping {file_path}: not overwritten")
+            return
+
     with open(secret_file, "wb") as f:
         f.write(encrypted_content)
 
