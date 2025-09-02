@@ -12,9 +12,11 @@ import sys
 from pathlib import Path
 
 # Constants
+AGE_REPO_URL = "https://github.com/FiloSottile/age"
 STORE_DIR = Path("store")
 USERS_CONFIG_FILE = Path("users.json")
 USER_SECRET_FILE = Path("user-secret.age")
+USER_SECRET_ENC_FILE = Path("user-secret.age.enc")
 MASTER_KEY_FILE = Path("master-key.age.enc")
 
 
@@ -45,17 +47,6 @@ def save_users_config(config: dict):
         json.dump(config, f, indent=2)
 
 
-def exec(command: list[str], input_data: str | None = None) -> str:
-    """Execute a command and return stdout, raise error if returncode != 0."""
-    process = subprocess.run(command, input=input_data, text=True, capture_output=True)
-
-    if process.returncode != 0:
-        cmd_str = " ".join(command)
-        raise RuntimeError(f"Command '{cmd_str}' failed: {process.stderr}")
-
-    return process.stdout
-
-
 def exec_bytes(command: list[str], input_data: bytes | None = None) -> bytes:
     """Execute a command and return stdout as bytes, raise error if returncode != 0."""
     process = subprocess.run(command, input=input_data, capture_output=True)
@@ -67,9 +58,30 @@ def exec_bytes(command: list[str], input_data: bytes | None = None) -> bytes:
     return process.stdout
 
 
-def generate_age_keypair() -> tuple[str, str]:
+def age(args: list[str], input_data: bytes | None = None) -> bytes:
+    """Run the `age` binary with given args via exec_bytes and return stdout bytes.
+
+    Preserves stdin (when input_data is None) so passphrase prompts work.
+    """
+    try:
+        return exec_bytes(["age", *args], input_data)
+    except FileNotFoundError:
+        print(f"Error: 'age' is not installed. Please visit {AGE_REPO_URL} for installation instructions.")
+        sys.exit(1)
+
+
+def age_keygen(args: list[str], input_data: bytes | None = None) -> bytes:
+    """Run the `age-keygen` binary with given args via exec_bytes and return stdout bytes."""
+    try:
+        return exec_bytes(["age-keygen", *args], input_data)
+    except FileNotFoundError:
+        print(f"Error: 'age-keygen' is not installed. Please visit {AGE_REPO_URL} for installation instructions.")
+        sys.exit(1)
+
+
+def age_keygen_generate() -> tuple[str, str]:
     """Generate an age keypair and return (private_key, public_key)."""
-    result = exec(["age-keygen"])
+    result = age_keygen([]).decode()
     lines = result.strip().split("\n")
 
     # Find the public key comment and private key
@@ -88,49 +100,85 @@ def generate_age_keypair() -> tuple[str, str]:
     return private_key, public_key
 
 
-def encrypt_with_age_recipients(data: str, recipients: list[str]) -> bytes:
-    """Encrypt data using age recipients and return encrypted content."""
-    cmd_list = ["age"]
+def age_encrypt_recipients_to_file(
+    data: bytes, recipients: list[str], output_path: Path
+) -> None:
+    """Encrypt bytes using age recipients and write directly to output_path."""
+    cmd_list: list[str] = []
     for recipient in recipients:
         cmd_list.extend(["-r", recipient])
+    cmd_list.extend(["-o", str(output_path)])
+    _ = age(cmd_list, data)
 
-    return exec_bytes(cmd_list, data.encode())
 
-
-def get_public_key_from_private(private_key: str) -> str:
+def age_keygen_public_from_private(private_key: str) -> str:
     """Get age public key from private key."""
-    return exec(["age-keygen", "-y"], private_key).strip()
+    return age_keygen(["-y"], private_key.encode()).decode().strip()
 
 
-def decrypt_with_age_key(encrypted_file_path: Path, private_key: str) -> str:
-    """Decrypt data from file using age private key."""
-    return exec(["age", "-d", "-i", "-", str(encrypted_file_path)], private_key)
+def age_decrypt_file_with_identity(encrypted_file_path: Path, private_key: str) -> bytes:
+    """Decrypt file using age identity (private key provided via stdin). Returns bytes."""
+    return age(["-d", "-i", "-", str(encrypted_file_path)], private_key.encode())
+
+
+def age_encrypt_file_with_passphrase(input_path: Path, output_path: Path) -> None:
+    """Encrypt a file with a passphrase, prompting on TTY; writes to output_path.
+
+    Uses exec_bytes to preserve TTY stdin for passphrase prompts, and ignores stdout.
+    """
+    # exec_bytes captures stdout/stderr, but does not override stdin when input_data is None.
+    # This allows age to prompt on the controlling TTY for the passphrase.
+    _ = age(["-p", "-o", str(output_path), str(input_path)], None)
+
+
+def age_decrypt_file_with_passphrase(input_path: Path) -> str:
+    """Decrypt a passphrase-encrypted file, prompting on TTY, return plaintext (str)."""
+    out = age(["-d", str(input_path)], None)
+    return out.decode().strip()
 
 
 def read_user_secret() -> str:
-    """Read user secret file with proper error handling and permission checks."""
-    if not USER_SECRET_FILE.exists():
+    """Read user secret from unencrypted or encrypted storage.
+
+    - If `user-secret.age` exists, enforce secure permissions and return its contents.
+    - Else if `user-secret.age.enc` exists, decrypt it using `age` and return the plaintext.
+    - Else, instruct the user to run `init-user`.
+    """
+    if USER_SECRET_FILE.exists():
+        # Warn if using unencrypted secret file
         print(
-            f"Error: User secret file {USER_SECRET_FILE} not found. Run 'init-user' first."
+            f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (user-secret.age.enc)."
         )
-        sys.exit(1)
 
-    # Check permissions
-    file_stat = USER_SECRET_FILE.stat()
-    permissions = stat.filemode(file_stat.st_mode)
+        # Check permissions
+        file_stat = USER_SECRET_FILE.stat()
+        permissions = stat.filemode(file_stat.st_mode)
 
-    # Check if group or others have read permissions
-    if file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
-        print(
-            f"Error: User secret file {USER_SECRET_FILE} is readable by group or others"
-        )
-        print(f"Current permissions: {permissions}")
-        print(f"Fix with: chmod 600 {USER_SECRET_FILE}")
-        sys.exit(1)
+        # Check if group or others have read permissions
+        if file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
+            print(
+                f"Error: User secret file {USER_SECRET_FILE} is readable by group or others"
+            )
+            print(f"Current permissions: {permissions}")
+            print(f"Fix with: chmod 600 {USER_SECRET_FILE}")
+            sys.exit(1)
 
-    # Read and return the private key
-    with open(USER_SECRET_FILE, "r") as f:
-        return f.read().strip()
+        # Read and return the private key
+        with open(USER_SECRET_FILE, "r") as f:
+            return f.read().strip()
+
+    if USER_SECRET_ENC_FILE.exists():
+        # Decrypt using age, allowing it to prompt for passphrase via stdin/tty.
+        try:
+            return age_decrypt_file_with_passphrase(USER_SECRET_ENC_FILE)
+        except RuntimeError as e:
+            print(f"Error: Failed to decrypt {USER_SECRET_ENC_FILE}: {e}")
+            sys.exit(1)
+
+    print(
+        f"Error: No user secret found. Run 'init-user' to create one."
+    )
+    sys.exit(1)
 
 
 def get_master_private_key() -> str:
@@ -145,7 +193,7 @@ def get_master_private_key() -> str:
     user_private_key = read_user_secret()
 
     # Get user's public key from private key
-    user_public_key = get_public_key_from_private(user_private_key)
+    user_public_key = age_keygen_public_from_private(user_private_key)
 
     # Check if user's public key is in users.json
     users_config = load_users_config()
@@ -153,8 +201,8 @@ def get_master_private_key() -> str:
         print("Error: Access denied")
         sys.exit(1)
 
-    # Decrypt master private key using user's private key
-    return decrypt_with_age_key(MASTER_KEY_FILE, user_private_key).strip()
+    # Decrypt master private key using user's private key (text output)
+    return age_decrypt_file_with_identity(MASTER_KEY_FILE, user_private_key).decode().strip()
 
 
 def get_all_users() -> list[str]:
@@ -179,19 +227,15 @@ def cmd_bootstrap(initial_user: str):
 
     # Read user secret and get public key from private key
     user_private_key = read_user_secret()
-    user_public_key = get_public_key_from_private(user_private_key)
+    user_public_key = age_keygen_public_from_private(user_private_key)
 
     # Generate master keypair
-    master_private_key, _ = generate_age_keypair()
+    master_private_key, _ = age_keygen_generate()
 
-    # Encrypt master private key with user's public key
-    encrypted_master_key = encrypt_with_age_recipients(
-        master_private_key, [user_public_key]
+    # Encrypt master private key with user's public key and write to file
+    age_encrypt_recipients_to_file(
+        master_private_key.encode(), [user_public_key], MASTER_KEY_FILE
     )
-
-    # Save encrypted master private key to file
-    with open(MASTER_KEY_FILE, "wb") as f:
-        f.write(encrypted_master_key)
 
     # Create users.json with user mapping
     users_config = {initial_user: user_public_key}
@@ -212,14 +256,13 @@ def cmd_add_file(file_path_str: str):
     master_private_key = get_master_private_key()
 
     # Get master public key from private key
-    master_public_key = get_public_key_from_private(master_private_key)
+    master_public_key = age_keygen_public_from_private(master_private_key)
 
-    # Read file content
-    with open(file_path, "r") as f:
+    # Read file content as bytes
+    with open(file_path, "rb") as f:
         content = f.read()
 
-    # Encrypt file with master public key
-    encrypted_content = encrypt_with_age_recipients(content, [master_public_key])
+    # Prepare output path
     secret_file = STORE_DIR / f"{file_path.name}.enc"
 
     # Check if encrypted file already exists
@@ -240,8 +283,8 @@ def cmd_add_file(file_path_str: str):
             print(f"Skipping {file_path}: not overwritten")
             return
 
-    with open(secret_file, "wb") as f:
-        f.write(encrypted_content)
+    # Encrypt file with master public key directly to secret_file
+    age_encrypt_recipients_to_file(content, [master_public_key], secret_file)
 
     print(f"File {file_path} added to secret store as {secret_file}")
 
@@ -259,8 +302,10 @@ def cmd_view_file(filename: str):
 
     # Decrypt and display file
     try:
-        content = decrypt_with_age_key(secret_file, master_private_key)
-        print(content, end="")  # Don't add extra newline
+        content = age_decrypt_file_with_identity(secret_file, master_private_key)
+        # Write bytes to stdout to support binary files
+        sys.stdout.buffer.write(content)
+        sys.stdout.buffer.flush()
     except RuntimeError as e:
         print(f"Error: {e}")
         sys.exit(1)
@@ -284,13 +329,9 @@ def cmd_add_user(username: str, age_pubkey: str):
     current_recipients.append(age_pubkey)
 
     # Re-encrypt master private key with all recipients (including new user)
-    encrypted_master_key = encrypt_with_age_recipients(
-        master_private_key, current_recipients
+    age_encrypt_recipients_to_file(
+        master_private_key.encode(), current_recipients, MASTER_KEY_FILE
     )
-
-    # Save re-encrypted master private key
-    with open(MASTER_KEY_FILE, "wb") as f:
-        f.write(encrypted_master_key)
 
     # Add user to users.json
     users_config[username] = age_pubkey
@@ -316,22 +357,17 @@ def cmd_remove_user(username: str):
 
     if users_config:  # If there are remaining users
         # Generate new master keypair for security
-        new_master_private_key, new_master_public_key = generate_age_keypair()
+        new_master_private_key, new_master_public_key = age_keygen_generate()
 
         # Re-encrypt all secrets with new master key
         print("Regenerating master key and re-encrypting secrets...")
         for secret_file in STORE_DIR.glob("*.enc"):
             try:
                 # Decrypt with old master key
-                content = decrypt_with_age_key(secret_file, old_master_private_key)
+                content = age_decrypt_file_with_identity(secret_file, old_master_private_key)
 
-                # Re-encrypt with new master public key
-                encrypted_content = encrypt_with_age_recipients(
-                    content, [new_master_public_key]
-                )
-
-                with open(secret_file, "wb") as f:
-                    f.write(encrypted_content)
+                # Re-encrypt with new master public key directly to the same file
+                age_encrypt_recipients_to_file(content, [new_master_public_key], secret_file)
 
                 print(f"Re-encrypted: {secret_file}")
             except RuntimeError as e:
@@ -339,12 +375,9 @@ def cmd_remove_user(username: str):
 
         # Encrypt new master private key for remaining users
         remaining_recipients = list(users_config.values())
-        encrypted_master_key = encrypt_with_age_recipients(
-            new_master_private_key, remaining_recipients
+        age_encrypt_recipients_to_file(
+            new_master_private_key.encode(), remaining_recipients, MASTER_KEY_FILE
         )
-
-        with open(MASTER_KEY_FILE, "wb") as f:
-            f.write(encrypted_master_key)
     else:
         # No users left, remove master password file
         MASTER_KEY_FILE.unlink()
@@ -361,7 +394,7 @@ def cmd_rotate_master_key():
     old_master_private_key = get_master_private_key()
 
     # Generate new master keypair
-    new_master_private_key, new_master_public_key = generate_age_keypair()
+    new_master_private_key, new_master_public_key = age_keygen_generate()
 
     # Get current users
     users_config = load_users_config()
@@ -375,15 +408,10 @@ def cmd_rotate_master_key():
     for secret_file in STORE_DIR.glob("*.enc"):
         try:
             # Decrypt with old master key
-            content = decrypt_with_age_key(secret_file, old_master_private_key)
+            content = age_decrypt_file_with_identity(secret_file, old_master_private_key)
 
-            # Re-encrypt with new master public key
-            encrypted_content = encrypt_with_age_recipients(
-                content, [new_master_public_key]
-            )
-
-            with open(secret_file, "wb") as f:
-                f.write(encrypted_content)
+            # Re-encrypt with new master public key directly to the same file
+            age_encrypt_recipients_to_file(content, [new_master_public_key], secret_file)
 
             print(f"Re-encrypted: {secret_file}")
         except RuntimeError as e:
@@ -392,37 +420,66 @@ def cmd_rotate_master_key():
     # Re-encrypt new master private key for all users
     print("Re-encrypting master private key for users...")
     user_public_keys = list(users_config.values())
-    encrypted_master_key = encrypt_with_age_recipients(
-        new_master_private_key, user_public_keys
+    age_encrypt_recipients_to_file(
+        new_master_private_key.encode(), user_public_keys, MASTER_KEY_FILE
     )
-
-    with open(MASTER_KEY_FILE, "wb") as f:
-        f.write(encrypted_master_key)
 
     print("Master keypair rotation complete")
 
 
-def cmd_init_user():
-    """Initialize user by generating age keypair."""
+def cmd_init_user(unencrypted: bool):
+    """Initialize user by generating age keypair.
 
-    if USER_SECRET_FILE.exists():
-        print(f"Error: User secret file already exists at {USER_SECRET_FILE}")
+    - If `--unencrypted` is provided, save the private key to `user-secret.age` with 600 perms.
+    - Otherwise, encrypt the private key with a passphrase and save as `user-secret.age.enc`.
+    """
+
+    # Prevent overwriting existing secrets
+    if USER_SECRET_FILE.exists() or USER_SECRET_ENC_FILE.exists():
+        which = USER_SECRET_FILE if USER_SECRET_FILE.exists() else USER_SECRET_ENC_FILE
+        print(f"Error: User secret already exists at {which}")
         sys.exit(1)
 
     # Generate age keypair for the user
-    user_private_key, user_public_key = generate_age_keypair()
+    user_private_key, user_public_key = age_keygen_generate()
 
-    # Save user's private key to user-secret.age
-    with open(USER_SECRET_FILE, "w") as f:
-        f.write(user_private_key)
+    if unencrypted:
+        # Save user's private key to user-secret.age
+        with open(USER_SECRET_FILE, "w") as f:
+            f.write(user_private_key)
 
-    # Set secure permissions (owner read/write only)
-    os.chmod(USER_SECRET_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        # Set secure permissions (owner read/write only)
+        os.chmod(USER_SECRET_FILE, stat.S_IRUSR | stat.S_IWUSR)
 
-    print("User initialization complete")
-    print(f"Age public key: {user_public_key}")
-    print(f"Age private key saved to: {USER_SECRET_FILE}")
-    print(f"Private key file permissions set to 600 (owner read/write only)")
+        print("User initialization complete (unencrypted)")
+        print(f"Age public key: {user_public_key}")
+        print(f"Age private key saved to: {USER_SECRET_FILE}")
+        print("Private key file permissions set to 600 (owner read/write only)")
+        return
+
+    # Encrypted user secret: write plaintext to user-secret.age and then encrypt with age -p
+    try:
+        # Write plaintext private key to user-secret.age
+        with open(USER_SECRET_FILE, "w") as f:
+            f.write(user_private_key)
+        os.chmod(USER_SECRET_FILE, stat.S_IRUSR | stat.S_IWUSR)
+
+        # Run age with passphrase, reading plaintext from user-secret.age.
+        # Allow age to access the TTY for passphrase entry by not overriding stdin.
+        age_encrypt_file_with_passphrase(USER_SECRET_FILE, USER_SECRET_ENC_FILE)
+
+        print("User initialization complete (encrypted)")
+        print(f"Age public key: {user_public_key}")
+        print(f"Encrypted private key saved to: {USER_SECRET_ENC_FILE}")
+        print(
+            f"Note: Plaintext private key also present at {USER_SECRET_FILE} (permissions 600)."
+        )
+    except FileNotFoundError as e:
+        print(f"Error: Required command not found: {e}")
+        sys.exit(1)
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 def cmd_show_pubkey():
@@ -432,7 +489,7 @@ def cmd_show_pubkey():
 
     # Get user's public key from private key
     try:
-        public_key = get_public_key_from_private(user_private_key)
+        public_key = age_keygen_public_from_private(user_private_key)
         print(f"Age public key: {public_key}")
     except RuntimeError as e:
         print(f"Error: Failed to derive public key: {e}")
@@ -478,7 +535,14 @@ def main():
     )
 
     # User management commands
-    subparsers.add_parser("init-user", help="Initialize user by generating age keypair")
+    init_user_parser = subparsers.add_parser(
+        "init-user", help="Initialize user by generating age keypair"
+    )
+    init_user_parser.add_argument(
+        "--unencrypted",
+        action="store_true",
+        help="Initialize with an unencrypted private key file",
+    )
     subparsers.add_parser("show-pubkey", help="Show user's age public key")
 
     # List files command
@@ -564,7 +628,7 @@ def main():
         elif args.command == "list-files":
             cmd_list_store()
         elif args.command == "init-user":
-            cmd_init_user()
+            cmd_init_user(args.unencrypted)
         elif args.command == "show-pubkey":
             cmd_show_pubkey()
     except KeyboardInterrupt:
