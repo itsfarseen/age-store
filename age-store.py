@@ -522,6 +522,36 @@ def cmd_list_store():
         print("  No secrets found")
 
 
+def cmd_migrate_encrypt_user_secret():
+    """Encrypt plaintext user secret to user-secret.age.enc and delete plaintext."""
+    # Preconditions
+    if not USER_SECRET_FILE.exists():
+        print(f"Error: Plaintext secret {USER_SECRET_FILE} not found.")
+        sys.exit(1)
+
+    # Run age -p to produce encrypted file
+    try:
+        age_encrypt_file_with_passphrase(USER_SECRET_FILE, USER_SECRET_ENC_FILE)
+    except RuntimeError as e:
+        print(f"Error: Failed to encrypt user secret: {e}")
+        sys.exit(1)
+
+    # Verify encrypted file now exists, then remove plaintext
+    if not USER_SECRET_ENC_FILE.exists():
+        print(f"Error: Failed to create {USER_SECRET_ENC_FILE}")
+        sys.exit(1)
+
+    try:
+        USER_SECRET_FILE.unlink()
+    except OSError as e:
+        print(f"Error: Encrypted file created but failed to delete plaintext: {e}")
+        sys.exit(1)
+
+    print(
+        f"Migrated user secret to {USER_SECRET_ENC_FILE} and removed {USER_SECRET_FILE}"
+    )
+
+
 def cmd_version():
     """Print the current version."""
     print(f"age-store v{VERSION}")
@@ -610,6 +640,25 @@ def main():
     # List users command
     admin_subparsers.add_parser("list-users", help="List all users with access")
 
+    # Migrate commands
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="Migration helpers for existing installations.",
+    )
+    migrate_subparsers = migrate_parser.add_subparsers(
+        dest="migrate_command",
+        metavar="MIGRATE_COMMAND",
+        title=None,  # type: ignore
+        description=None,
+    )
+    migrate_subparsers.add_parser(
+        "encrypt-user-secret",
+        help=(
+            "Encrypt plaintext user secret (user-secret.age) to user-secret.age.enc with a "
+            "passphrase, then remove the plaintext."
+        ),
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -642,6 +691,12 @@ def main():
             cmd_init_user(args.unencrypted)
         elif args.command == "show-pubkey":
             cmd_show_pubkey()
+        elif args.command == "migrate":
+            if not args.migrate_command:
+                migrate_parser.print_help()
+                sys.exit(1)
+            if args.migrate_command == "encrypt-user-secret":
+                cmd_migrate_encrypt_user_secret()
         elif args.command == "version":
             cmd_version()
     except KeyboardInterrupt:
