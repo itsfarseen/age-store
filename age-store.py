@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 # Constants
+VERSION = 0.2
 AGE_REPO_URL = "https://github.com/FiloSottile/age"
 STORE_DIR = Path("store")
 USERS_CONFIG_FILE = Path("users.json")
@@ -521,6 +522,13 @@ def cmd_list_store():
         print("  No secrets found")
 
 
+def cmd_version():
+    """Print the current version."""
+    print(f"age-store v{VERSION}")
+    print("Copyright (c) 2025 Farseen")
+    print("License: MIT")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Age Store",
@@ -544,6 +552,9 @@ def main():
         help="Initialize with an unencrypted private key file",
     )
     subparsers.add_parser("show-pubkey", help="Show user's age public key")
+
+    # Version command
+    subparsers.add_parser("version", help="Print the current version")
 
     # List files command
     subparsers.add_parser("list-files", help="List all available files")
@@ -631,6 +642,8 @@ def main():
             cmd_init_user(args.unencrypted)
         elif args.command == "show-pubkey":
             cmd_show_pubkey()
+        elif args.command == "version":
+            cmd_version()
     except KeyboardInterrupt:
         print("\nOperation cancelled")
         sys.exit(1)
