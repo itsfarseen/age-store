@@ -13,6 +13,7 @@
 **Other changes**
 - Support encrypting and decrypting binary files.
 - Add `version` command.
+- Command renames: `list-files` → `ls`, `view-file` → `view`, `add-file` → `add`.
 
 ## 0.1 (Initial Release)
 

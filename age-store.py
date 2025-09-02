@@ -609,11 +609,11 @@ def main():
     subparsers.add_parser("version", help="Print the current version")
 
     # List files command
-    subparsers.add_parser("list-files", help="List all available files")
+    subparsers.add_parser("ls", help="List all available files")
 
     # View file command
     view_file_parser = subparsers.add_parser(
-        "view-file", help="View a file from the secret store"
+        "view", help="View a file from the secret store"
     )
     view_file_parser.add_argument(
         "file", help="Name of the file to view (without .enc extension)"
@@ -621,7 +621,7 @@ def main():
 
     # Add file command
     add_file_parser = subparsers.add_parser(
-        "add-file", help="Add a file to the secret store"
+        "add", help="Add a file to the secret store"
     )
     add_file_parser.add_argument("file", help="Path to the file to add")
 
@@ -703,11 +703,11 @@ def main():
                 cmd_rotate_master_key()
             elif args.admin_command == "list-users":
                 cmd_list_users()
-        elif args.command == "add-file":
+        elif args.command == "add":
             cmd_add_file(args.file)
-        elif args.command == "view-file":
+        elif args.command == "view":
             cmd_view_file(args.file)
-        elif args.command == "list-files":
+        elif args.command == "ls":
             cmd_list_store()
         elif args.command == "init-user":
             cmd_init_user(args.unencrypted)
