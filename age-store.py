@@ -67,7 +67,9 @@ def age(args: list[str], input_data: bytes | None = None) -> bytes:
     try:
         return exec_bytes(["age", *args], input_data)
     except FileNotFoundError:
-        print(f"Error: 'age' is not installed. Please visit {AGE_REPO_URL} for installation instructions.")
+        print(
+            f"Error: 'age' is not installed. Please visit {AGE_REPO_URL} for installation instructions."
+        )
         sys.exit(1)
 
 
@@ -76,7 +78,9 @@ def age_keygen(args: list[str], input_data: bytes | None = None) -> bytes:
     try:
         return exec_bytes(["age-keygen", *args], input_data)
     except FileNotFoundError:
-        print(f"Error: 'age-keygen' is not installed. Please visit {AGE_REPO_URL} for installation instructions.")
+        print(
+            f"Error: 'age-keygen' is not installed. Please visit {AGE_REPO_URL} for installation instructions."
+        )
         sys.exit(1)
 
 
@@ -117,7 +121,9 @@ def age_keygen_public_from_private(private_key: str) -> str:
     return age_keygen(["-y"], private_key.encode()).decode().strip()
 
 
-def age_decrypt_file_with_identity(encrypted_file_path: Path, private_key: str) -> bytes:
+def age_decrypt_file_with_identity(
+    encrypted_file_path: Path, private_key: str
+) -> bytes:
     """Decrypt file using age identity (private key provided via stdin). Returns bytes."""
     return age(["-d", "-i", "-", str(encrypted_file_path)], private_key.encode())
 
@@ -176,9 +182,7 @@ def read_user_secret() -> str:
             print(f"Error: Failed to decrypt {USER_SECRET_ENC_FILE}: {e}")
             sys.exit(1)
 
-    print(
-        f"Error: No user secret found. Run 'init-user' to create one."
-    )
+    print(f"Error: No user secret found. Run 'init-user' to create one.")
     sys.exit(1)
 
 
@@ -203,7 +207,11 @@ def get_master_private_key() -> str:
         sys.exit(1)
 
     # Decrypt master private key using user's private key (text output)
-    return age_decrypt_file_with_identity(MASTER_KEY_FILE, user_private_key).decode().strip()
+    return (
+        age_decrypt_file_with_identity(MASTER_KEY_FILE, user_private_key)
+        .decode()
+        .strip()
+    )
 
 
 def get_all_users() -> list[str]:
@@ -268,10 +276,16 @@ def cmd_add_file(file_path_str: str):
 
     # Check if encrypted file already exists
     while secret_file.exists():
-        response = input(f"File {secret_file} already exists in store. Overwrite, rename, or skip? [y/N/r]: ").strip().lower()
-        if response == 'y':
+        response = (
+            input(
+                f"File {secret_file} already exists in store. Overwrite, rename, or skip? [y/N/r]: "
+            )
+            .strip()
+            .lower()
+        )
+        if response == "y":
             break  # Proceed to overwrite
-        elif response == 'r':
+        elif response == "r":
             new_name = input(f"Enter new filename (without .enc): ").strip()
             if not new_name:
                 print("Error: No filename provided, skipping")
@@ -365,10 +379,14 @@ def cmd_remove_user(username: str):
         for secret_file in STORE_DIR.glob("*.enc"):
             try:
                 # Decrypt with old master key
-                content = age_decrypt_file_with_identity(secret_file, old_master_private_key)
+                content = age_decrypt_file_with_identity(
+                    secret_file, old_master_private_key
+                )
 
                 # Re-encrypt with new master public key directly to the same file
-                age_encrypt_recipients_to_file(content, [new_master_public_key], secret_file)
+                age_encrypt_recipients_to_file(
+                    content, [new_master_public_key], secret_file
+                )
 
                 print(f"Re-encrypted: {secret_file}")
             except RuntimeError as e:
@@ -409,10 +427,14 @@ def cmd_rotate_master_key():
     for secret_file in STORE_DIR.glob("*.enc"):
         try:
             # Decrypt with old master key
-            content = age_decrypt_file_with_identity(secret_file, old_master_private_key)
+            content = age_decrypt_file_with_identity(
+                secret_file, old_master_private_key
+            )
 
             # Re-encrypt with new master public key directly to the same file
-            age_encrypt_recipients_to_file(content, [new_master_public_key], secret_file)
+            age_encrypt_recipients_to_file(
+                content, [new_master_public_key], secret_file
+            )
 
             print(f"Re-encrypted: {secret_file}")
         except RuntimeError as e:
