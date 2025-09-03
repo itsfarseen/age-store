@@ -11,36 +11,18 @@ import sys
 from pathlib import Path
 
 
-class TermColor:
-    """Terminal color helper with static methods for color escape sequences."""
+class T:
+    """Terminal color helper with ANSI escape sequences."""
 
-    @staticmethod
-    def red():
-        return "\033[31m"
-
-    @staticmethod
-    def green():
-        return "\033[32m"
-
-    @staticmethod
-    def blue():
-        return "\033[34m"
-
-    @staticmethod
-    def yellow():
-        return "\033[33m"
-
-    @staticmethod
-    def grey():
-        return "\033[90m"
-
-    @staticmethod
-    def bold():
-        return "\033[1m"
-
-    @staticmethod
-    def clear():
-        return "\033[0m"
+    red, green, blue, yellow, grey, bold, clear = (
+        "\033[31m",
+        "\033[32m",
+        "\033[34m",
+        "\033[33m",
+        "\033[90m",
+        "\033[1m",
+        "\033[0m",
+    )
 
 
 # Test configuration
@@ -80,7 +62,7 @@ def run_age_store_command(
         store_name = Path(store_path).name
         args_str = " ".join(command)
         print(
-            f"{TermColor.blue()}{store_name}:{TermColor.clear()} {TermColor.yellow()}age-store.py {args_str}{TermColor.clear()}",
+            f"{T.blue}{store_name}:{T.clear} {T.yellow}age-store.py {args_str}{T.clear}",
             end="\r",
         )
 
@@ -91,17 +73,19 @@ def run_age_store_command(
 
             # Rewrite the line with success/failure color
             if result.returncode == 0:
-                command_color = TermColor.green()
+                command_color = T.green
             else:
-                command_color = TermColor.red()
+                command_color = T.red
 
             print(
-                f"{TermColor.blue()}{store_name}:{TermColor.clear()} {command_color}age-store.py {args_str}{TermColor.clear()}"
+                f"{T.blue}{store_name}:{T.clear} {command_color}age-store.py {args_str}{T.clear}"
             )
 
             # Print output if verbose mode is enabled
             if verbose and result.stdout.strip():
-                print_with_left_border(result.stdout.rstrip(), border_color=TermColor.grey(), text_color=TermColor.grey())
+                print_with_left_border(
+                    result.stdout.rstrip(), border_color=T.grey, text_color=T.grey
+                )
 
             return result.returncode, result.stdout, result.stderr
         else:
@@ -115,9 +99,9 @@ def verbose_check(description, condition):
     """Print check description and result if verbose mode is enabled, return condition value."""
     if verbose:
         if condition:
-            print(f"{TermColor.green()}▸ check {description} [OK]{TermColor.clear()}")
+            print(f"{T.green}▸ check {description} [OK]{T.clear}")
         else:
-            print(f"{TermColor.red()}▸ check {description} [FAIL]{TermColor.clear()}")
+            print(f"{T.red}▸ check {description} [FAIL]{T.clear}")
     return condition
 
 
@@ -231,15 +215,15 @@ def setup_stores():
 
     # Setup store1
     returncode, stdout, stderr = run_age_store_command(
-        store1_path, ["init-user", "--unencrypted"], 
-        description="initialize store1 user"
+        store1_path,
+        ["init-user", "--unencrypted"],
+        description="initialize store1 user",
     )
     if returncode != 0:
         raise RuntimeError(f"Failed to init store1: {stderr}")
 
     returncode, pubkey_stdout, stderr = run_age_store_command(
-        store1_path, ["show-pubkey"],
-        description="get store1 public key"
+        store1_path, ["show-pubkey"], description="get store1 public key"
     )
     if returncode != 0:
         raise RuntimeError(f"Failed to get store1 pubkey: {stderr}")
@@ -250,16 +234,18 @@ def setup_stores():
             f"No valid public key found in store1 output: {pubkey_stdout}"
         )
     returncode, stdout, stderr = run_age_store_command(
-        store1_path, ["admin", "bootstrap", "user1"],
-        description="bootstrap store1 with user1"
+        store1_path,
+        ["admin", "bootstrap", "user1"],
+        description="bootstrap store1 with user1",
     )
     if returncode != 0:
         raise RuntimeError(f"Failed to bootstrap store1: {stderr}")
 
     # Setup store2 (init-user only)
     returncode, stdout, stderr = run_age_store_command(
-        store2_path, ["init-user", "--unencrypted"],
-        description="initialize store2 user"
+        store2_path,
+        ["init-user", "--unencrypted"],
+        description="initialize store2 user",
     )
     if returncode != 0:
         raise RuntimeError(f"Failed to init store2: {stderr}")
@@ -399,14 +385,15 @@ def test_store2_access_after_copy():
 
     # Store original store2 pubkey for verification
     returncode, original_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"],
-        description="get original store2 public key"
+        store2_path, ["show-pubkey"], description="get original store2 public key"
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"Failed to get original store2 pubkey: {stderr}"
-    
+
     original_pubkey = extract_public_key(original_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", original_pubkey is not None):
+    if not verbose_check(
+        "output contains valid age1 public key", original_pubkey is not None
+    ):
         return False, f"No valid original pubkey found: {original_pubkey_stdout}"
 
     # Copy store1 files to store2 (excluding user-secret)
@@ -414,17 +401,20 @@ def test_store2_access_after_copy():
 
     # Verify store2 pubkey hasn't changed
     returncode, current_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"],
-        description="verify store2 public key after copy"
+        store2_path, ["show-pubkey"], description="verify store2 public key after copy"
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"Failed to get current store2 pubkey: {stderr}"
 
     current_pubkey = extract_public_key(current_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", current_pubkey is not None):
+    if not verbose_check(
+        "output contains valid age1 public key", current_pubkey is not None
+    ):
         return False, f"No valid current pubkey found: {current_pubkey_stdout}"
-    
-    if not verbose_check("public key unchanged after copy", original_pubkey == current_pubkey):
+
+    if not verbose_check(
+        "public key unchanged after copy", original_pubkey == current_pubkey
+    ):
         return (
             False,
             f"Store2 pubkey changed after copy: {original_pubkey} -> {current_pubkey}",
@@ -432,19 +422,21 @@ def test_store2_access_after_copy():
 
     # Test that store2 can now access the files
     returncode, stdout, stderr = run_age_store_command(
-        store2_path, ["ls"],
-        description="list files from store2 after copy"
+        store2_path, ["ls"], description="list files from store2 after copy"
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"store2 ls failed: {stderr}"
 
-    if not verbose_check("output contains test-secret.txt", "test-secret.txt" in stdout):
+    if not verbose_check(
+        "output contains test-secret.txt", "test-secret.txt" in stdout
+    ):
         return False, f"store2 cannot see files: {stdout}"
 
     # Test view
     returncode, stdout, stderr = run_age_store_command(
-        store2_path, ["view", "test-secret.txt"],
-        description="view test-secret.txt from store2"
+        store2_path,
+        ["view", "test-secret.txt"],
+        description="view test-secret.txt from store2",
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"store2 view failed: {stderr}"
@@ -455,8 +447,9 @@ def test_store2_access_after_copy():
     # Test add
     test_file = create_test_file(store2_path, "store2-secret.txt", "store2 content")
     returncode, stdout, stderr = run_age_store_command(
-        store2_path, ["add", test_file.name],
-        description="add store2-secret.txt from store2"
+        store2_path,
+        ["add", test_file.name],
+        description="add store2-secret.txt from store2",
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"store2 add failed: {stderr}"
@@ -494,14 +487,17 @@ def test_master_key_rotation():
 
     # Store original store2 pubkey
     returncode, original_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"],
-        description="get store2 public key before rotation"
+        store2_path,
+        ["show-pubkey"],
+        description="get store2 public key before rotation",
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"Failed to get store2 pubkey before copy: {stderr}"
-    
+
     original_pubkey = extract_public_key(original_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", original_pubkey is not None):
+    if not verbose_check(
+        "output contains valid age1 public key", original_pubkey is not None
+    ):
         return False, f"No valid original pubkey found: {original_pubkey_stdout}"
 
     # Copy rotated store1 files to store2
@@ -509,20 +505,25 @@ def test_master_key_rotation():
 
     # Verify store2 pubkey hasn't changed
     returncode, current_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"],
-        description="verify store2 public key after rotation copy"
+        store2_path,
+        ["show-pubkey"],
+        description="verify store2 public key after rotation copy",
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"Failed to get store2 pubkey after copy: {stderr}"
 
     current_pubkey = extract_public_key(current_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", current_pubkey is not None):
+    if not verbose_check(
+        "output contains valid age1 public key", current_pubkey is not None
+    ):
         return (
             False,
             f"No valid current pubkey found after copy: {current_pubkey_stdout}",
         )
-    
-    if not verbose_check("public key unchanged after rotation", original_pubkey == current_pubkey):
+
+    if not verbose_check(
+        "public key unchanged after rotation", original_pubkey == current_pubkey
+    ):
         return (
             False,
             f"Store2 pubkey changed after copy: {original_pubkey} -> {current_pubkey}",
@@ -531,13 +532,16 @@ def test_master_key_rotation():
     # Test that both store1 and store2 can still access files
     for store_name, store_path in [("store1", store1_path), ("store2", store2_path)]:
         returncode, stdout, stderr = run_age_store_command(
-            store_path, ["view", "test-secret.txt"],
-            description=f"verify {store_name} can access file after rotation"
+            store_path,
+            ["view", "test-secret.txt"],
+            description=f"verify {store_name} can access file after rotation",
         )
         if not verbose_check("command succeeded", returncode == 0):
             return False, f"{store_name} cannot access file after rotation: {stderr}"
 
-        if not verbose_check("output contains secret content", "secret content" in stdout):
+        if not verbose_check(
+            "output contains secret content", "secret content" in stdout
+        ):
             return (
                 False,
                 f"{store_name} file content incorrect after rotation: {stdout}",
@@ -553,14 +557,15 @@ def test_user_removal():
 
     # Store original store2 pubkey
     returncode, original_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"],
-        description="get store2 public key before removal"
+        store2_path, ["show-pubkey"], description="get store2 public key before removal"
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"Failed to get store2 pubkey: {stderr}"
-    
+
     original_pubkey = extract_public_key(original_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", original_pubkey is not None):
+    if not verbose_check(
+        "output contains valid age1 public key", original_pubkey is not None
+    ):
         return False, f"No valid original pubkey found: {original_pubkey_stdout}"
 
     # Remove store2 user from store1
@@ -577,20 +582,25 @@ def test_user_removal():
 
     # Verify store2 pubkey hasn't changed
     returncode, current_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"],
-        description="verify store2 public key after removal"
+        store2_path,
+        ["show-pubkey"],
+        description="verify store2 public key after removal",
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"Failed to get store2 pubkey after removal: {stderr}"
 
     current_pubkey = extract_public_key(current_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", current_pubkey is not None):
+    if not verbose_check(
+        "output contains valid age1 public key", current_pubkey is not None
+    ):
         return (
             False,
             f"No valid current pubkey found after removal: {current_pubkey_stdout}",
         )
-    
-    if not verbose_check("public key unchanged after removal", original_pubkey == current_pubkey):
+
+    if not verbose_check(
+        "public key unchanged after removal", original_pubkey == current_pubkey
+    ):
         return (
             False,
             f"Store2 pubkey changed after copy: {original_pubkey} -> {current_pubkey}",
@@ -610,8 +620,9 @@ def test_user_removal():
         store2_path, "unauthorized-secret.txt", "unauthorized content"
     )
     returncode, stdout, stderr = run_age_store_command(
-        store2_path, ["add", test_file.name],
-        description="try to add unauthorized-secret.txt from store2 (should fail)"
+        store2_path,
+        ["add", test_file.name],
+        description="try to add unauthorized-secret.txt from store2 (should fail)",
     )
     if not verbose_check("command failed as expected", returncode != 0):
         return False, "Store2 can still add files after user removal"
@@ -632,47 +643,47 @@ def get_terminal_width():
 def print_horizontal_rule():
     """Print a horizontal rule spanning the terminal width."""
     width = get_terminal_width()
-    print(f"{TermColor.grey()}{'─' * width}{TermColor.clear()}")
+    print(f"{T.grey}{'─' * width}{T.clear}")
 
 
 def print_with_left_border(text, border_char="│", border_color=None, text_color=None):
     """Print text with a left border, wrapping lines to terminal width."""
     width = get_terminal_width()
-    border_prefix = f"{border_color or ''}{border_char}{TermColor.clear()} {text_color or ''}"
+    border_prefix = f"{border_color or ''}{border_char}{T.clear} {text_color or ''}"
     content_width = width - len(border_char) - 1  # Account for border and space
-    
-    lines = text.split('\n')
+
+    lines = text.split("\n")
     for line in lines:
         if not line.strip():  # Handle empty lines
-            print(f"{border_prefix}{TermColor.clear()}")
+            print(f"{border_prefix}{T.clear}")
         elif len(line) <= content_width:
-            print(f"{border_prefix}{line}{TermColor.clear()}")
+            print(f"{border_prefix}{line}{T.clear}")
         else:
             # Wrap long lines
             while line:
                 chunk = line[:content_width]
                 line = line[content_width:]
-                print(f"{border_prefix}{chunk}{TermColor.clear()}")
+                print(f"{border_prefix}{chunk}{T.clear}")
 
 
 def run_test(test_name, test_func, test_number, total_tests):
     """Run a single test and report results."""
     print_horizontal_rule()
     print(
-        f"{TermColor.bold()}{TermColor.yellow()}[{test_number}/{total_tests}] Running {test_name}...{TermColor.clear()}"
+        f"{T.bold}{T.yellow}[{test_number}/{total_tests}] Running {test_name}...{T.clear}"
     )
     try:
         success, message = test_func()
         if success:
-            print(f"{TermColor.bold()}{TermColor.green()}PASS{TermColor.clear()}")
+            print(f"{T.bold}{T.green}PASS{T.clear}")
             return True
         else:
-            print(f"{TermColor.bold()}{TermColor.red()}FAIL{TermColor.clear()}")
+            print(f"{T.bold}{T.red}FAIL{T.clear}")
             if message:
                 print(f"  Error: {message}")
             return False
     except Exception as e:
-        print(f"{TermColor.bold()}{TermColor.red()}FAIL{TermColor.clear()}")
+        print(f"{T.bold}{T.red}FAIL{T.clear}")
         print(f"  Exception: {e}")
         return False
 
@@ -695,8 +706,8 @@ def main():
 
     # Simple header
     width = get_terminal_width()
-    print(f"{TermColor.bold()}{TermColor.yellow()}Age Store CLI Test Runner{TermColor.clear()}")
-    print(f"{TermColor.blue()}{'─' * width}{TermColor.clear()}")
+    print(f"{T.bold}{T.yellow}Age Store CLI Test Runner{T.clear}")
+    print(f"{T.blue}{'─' * width}{T.clear}")
 
     # Setup
     print("Setting up test environment...")
@@ -708,10 +719,12 @@ def main():
 
     # Calculate total tests
     total_test_count = 9  # Update this if you add/remove tests
-    
+
     # Basic init and bootstrap tests
     total += 1
-    result = run_test("test_init_and_bootstrap", test_init_and_bootstrap, total, total_test_count)
+    result = run_test(
+        "test_init_and_bootstrap", test_init_and_bootstrap, total, total_test_count
+    )
     if result is True:
         passed += 1
     elif result is None:
@@ -749,18 +762,18 @@ def main():
     # Simple footer
     print()
     width = get_terminal_width()
-    print(f"{TermColor.blue()}{'─' * width}{TermColor.clear()}")
-    
+    print(f"{T.blue}{'─' * width}{T.clear}")
+
     # Results and status on separate lines, left-aligned
-    print(f"{TermColor.bold()}Test Results: {passed}/{total} tests passed{TermColor.clear()}")
-    
+    print(f"{T.bold}Test Results: {passed}/{total} tests passed{T.clear}")
+
     if passed == total:
-        print(f"{TermColor.bold()}{TermColor.green()}All tests passed! ✅{TermColor.clear()}")
+        print(f"{T.bold}{T.green}All tests passed! ✅{T.clear}")
         return_code = 0
     else:
-        print(f"{TermColor.bold()}{TermColor.red()}{total - passed} tests failed! ❌{TermColor.clear()}")
+        print(f"{T.bold}{T.red}{total - passed} tests failed! ❌{T.clear}")
         return_code = 1
-    
+
     return return_code
 
 
