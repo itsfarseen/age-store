@@ -17,9 +17,31 @@ VERSION = 0.2
 AGE_REPO_URL = "https://github.com/FiloSottile/age"
 STORE_DIR = Path("store")
 USERS_CONFIG_FILE = Path("users.json")
-USER_SECRET_FILE = Path("user-secret.age")
-USER_SECRET_ENC_FILE = Path("user-secret.age.enc")
+DEFAULT_USER_SECRET_FILE = Path("user-secret.age")
+DEFAULT_USER_SECRET_ENC_FILE = Path("user-secret.age.enc")
 MASTER_KEY_FILE = Path("master-key.age.enc")
+
+# Global variable for user secret file path (set by set_user_secret_file)
+USER_SECRET_FILE = None
+
+
+def set_user_secret_file(user_secret_path: str | None = None):
+    """Set the global USER_SECRET_FILE based on command line arg or default logic.
+    
+    Args:
+        user_secret_path: Optional path to user secret file from command line
+    """
+    global USER_SECRET_FILE
+    
+    if user_secret_path:
+        # Use the provided path
+        USER_SECRET_FILE = Path(user_secret_path)
+    elif DEFAULT_USER_SECRET_FILE.exists():
+        # Use unencrypted file if it exists
+        USER_SECRET_FILE = DEFAULT_USER_SECRET_FILE
+    else:
+        # Default to encrypted file
+        USER_SECRET_FILE = DEFAULT_USER_SECRET_ENC_FILE
 
 
 def ensure_directories():
@@ -159,16 +181,28 @@ def check_unencrypted_user_secret_permissions() -> bool:
 
 
 def read_user_secret() -> str:
-    """Read user secret from unencrypted or encrypted storage.
+    """Read user secret from the globally set USER_SECRET_FILE.
 
-    - If `user-secret.age` exists, enforce secure permissions and return its contents.
-    - Else if `user-secret.age.enc` exists, decrypt it using `age` and return the plaintext.
-    - Else, instruct the user to run `init-user`.
+    - If file ends with .enc, decrypt it using `age` and return the plaintext.
+    - Else, enforce secure permissions and return its contents.
+    - If file doesn't exist, show error with init hint.
     """
-    if USER_SECRET_FILE.exists():
-        # Warn if using unencrypted secret file
+    if not USER_SECRET_FILE.exists():
+        print(f"Error: User secret file {USER_SECRET_FILE} not found.")
+        print("Run 'age-store.py init-user' to create a user secret.")
+        sys.exit(1)
+
+    if USER_SECRET_FILE.suffix == '.enc' or USER_SECRET_FILE.name.endswith('.age.enc'):
+        # Encrypted file - decrypt using age, allowing it to prompt for passphrase via stdin/tty.
+        try:
+            return age_decrypt_file_with_passphrase(USER_SECRET_FILE)
+        except RuntimeError as e:
+            print(f"Error: Failed to decrypt {USER_SECRET_FILE}: {e}")
+            sys.exit(1)
+    else:
+        # Plain file - warn if using unencrypted secret file
         print(
-            f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (user-secret.age.enc).",
+            f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (.enc suffix).",
             file=sys.stderr
         )
 
@@ -183,17 +217,6 @@ def read_user_secret() -> str:
         # Read and return the private key
         with open(USER_SECRET_FILE, "r") as f:
             return f.read().strip()
-
-    if USER_SECRET_ENC_FILE.exists():
-        # Decrypt using age, allowing it to prompt for passphrase via stdin/tty.
-        try:
-            return age_decrypt_file_with_passphrase(USER_SECRET_ENC_FILE)
-        except RuntimeError as e:
-            print(f"Error: Failed to decrypt {USER_SECRET_ENC_FILE}: {e}")
-            sys.exit(1)
-
-    print(f"Error: No user secret found. Run 'init-user' to create one.")
-    sys.exit(1)
 
 
 def get_master_private_key() -> str:
@@ -447,50 +470,81 @@ def cmd_rotate_master_key():
 def cmd_init_user(unencrypted: bool):
     """Initialize user by generating age keypair.
 
-    - If `--unencrypted` is provided, save the private key to `user-secret.age` with 600 perms.
-    - Otherwise, encrypt the private key with a passphrase and save as `user-secret.age.enc`.
+    - If `--unencrypted` is provided, save the private key to the specified path or user-secret.age with 600 perms.
+    - Otherwise, encrypt the private key with a passphrase and save to the specified path or user-secret.age.enc.
     """
+    # Determine output files based on global USER_SECRET_FILE or defaults
+    if USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE:
+        # Custom path specified via --user-secret
+        target_file = USER_SECRET_FILE
+        
+        # Validate extension matches the chosen mode
+        is_encrypted_extension = target_file.suffix == '.enc' or target_file.name.endswith('.age.enc')
+        if unencrypted and is_encrypted_extension:
+            print(f"Error: --unencrypted specified but target file {target_file} has encrypted extension (.enc)")
+            print("Use a plain file extension or remove --unencrypted flag")
+            sys.exit(1)
+        elif not unencrypted and not is_encrypted_extension:
+            print(f"Error: encrypted mode selected but target file {target_file} does not have encrypted extension (.enc)")
+            print("Use an .enc extension or add --unencrypted flag")
+            sys.exit(1)
+    else:
+        # Use default paths
+        target_file = DEFAULT_USER_SECRET_FILE if unencrypted else DEFAULT_USER_SECRET_ENC_FILE
+
+    # For encrypted mode, derive temp file by removing .enc extension
+    if not unencrypted:
+        if target_file.name.endswith('.age.enc'):
+            temp_file = target_file.with_name(target_file.name[:-4])  # Remove .enc
+        elif target_file.suffix == '.enc':
+            temp_file = target_file.with_suffix('')  # Remove .enc suffix
+        else:
+            temp_file = target_file.with_suffix('.age')  # Add .age extension
+    else:
+        temp_file = None
 
     # Prevent overwriting existing secrets
-    if USER_SECRET_FILE.exists() or USER_SECRET_ENC_FILE.exists():
-        which = USER_SECRET_FILE if USER_SECRET_FILE.exists() else USER_SECRET_ENC_FILE
-        print(f"Error: User secret already exists at {which}")
+    if target_file.exists():
+        print(f"Error: User secret already exists at {target_file}")
+        sys.exit(1)
+    if temp_file and temp_file.exists():
+        print(f"Error: Temporary file {temp_file} already exists")
         sys.exit(1)
 
     # Generate age keypair for the user
     user_private_key, user_public_key = age_keygen_generate()
 
     if unencrypted:
-        # Save user's private key to user-secret.age
-        with open(USER_SECRET_FILE, "w") as f:
+        # Save user's private key to target file
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_file, "w") as f:
             f.write(user_private_key)
 
         # Set secure permissions (owner read/write only)
-        os.chmod(USER_SECRET_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        os.chmod(target_file, stat.S_IRUSR | stat.S_IWUSR)
 
         print("User initialization complete (unencrypted)")
         print(f"Age public key: {user_public_key}")
-        print(f"Age private key saved to: {USER_SECRET_FILE}")
+        print(f"Age private key saved to: {target_file}")
         print("Private key file permissions set to 600 (owner read/write only)")
         return
 
-    # Encrypted user secret: write plaintext to user-secret.age and then encrypt with age -p
+    # Encrypted user secret
     try:
-        # Write plaintext private key to user-secret.age
-        with open(USER_SECRET_FILE, "w") as f:
+        # Write plaintext private key to temp file
+        temp_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(temp_file, "w") as f:
             f.write(user_private_key)
-        os.chmod(USER_SECRET_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        os.chmod(temp_file, stat.S_IRUSR | stat.S_IWUSR)
 
-        # Run age with passphrase, reading plaintext from user-secret.age.
-        # Allow age to access the TTY for passphrase entry by not overriding stdin.
-        age_encrypt_file_with_passphrase(USER_SECRET_FILE, USER_SECRET_ENC_FILE)
+        # Run age with passphrase, reading plaintext from temp file
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        age_encrypt_file_with_passphrase(temp_file, target_file)
 
         print("User initialization complete (encrypted)")
         print(f"Age public key: {user_public_key}")
-        print(f"Encrypted private key saved to: {USER_SECRET_ENC_FILE}")
-        print(
-            f"Note: Plaintext private key also present at {USER_SECRET_FILE} (permissions 600)."
-        )
+        print(f"Encrypted private key saved to: {target_file}")
+        print(f"Note: Plaintext private key also present at {temp_file} (permissions 600).")
     except FileNotFoundError as e:
         print(f"Error: Required command not found: {e}")
         sys.exit(1)
@@ -553,34 +607,35 @@ def cmd_doctor():
         results.append(("OK", "'age-keygen' is installed"))
 
     # Secret encryption status and permissions
-    if USER_SECRET_FILE.exists():
+    if DEFAULT_USER_SECRET_FILE.exists():
         results.append(
-            ("WARN", f"Unencrypted user secret present at {USER_SECRET_FILE}")
+            ("WARN", f"Unencrypted user secret present at {DEFAULT_USER_SECRET_FILE}")
         )
-        if not check_unencrypted_user_secret_permissions():
+        file_stat = DEFAULT_USER_SECRET_FILE.stat()
+        if file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
             results.append(
                 (
                     "ERROR",
-                    f"Permissions for {USER_SECRET_FILE} are too open; run: chmod 600 {USER_SECRET_FILE}",
+                    f"Permissions for {DEFAULT_USER_SECRET_FILE} are too open; run: chmod 600 {DEFAULT_USER_SECRET_FILE}",
                 )
             )
         else:
             results.append(
-                ("OK", f"Permissions for {USER_SECRET_FILE} are 600 (owner-only)")
+                ("OK", f"Permissions for {DEFAULT_USER_SECRET_FILE} are 600 (owner-only)")
             )
-    elif USER_SECRET_ENC_FILE.exists():
-        results.append(("OK", f"User secret is encrypted ({USER_SECRET_ENC_FILE})"))
+    elif DEFAULT_USER_SECRET_ENC_FILE.exists():
+        results.append(("OK", f"User secret is encrypted ({DEFAULT_USER_SECRET_ENC_FILE})"))
     else:
         results.append(("WARN", "No user secret found (run 'init-user')"))
 
     # Attempt to load current user's private key (may prompt if encrypted)
     user_private_key: str | None = None
     try:
-        if USER_SECRET_FILE.exists():
-            with open(USER_SECRET_FILE, "r") as f:
+        if DEFAULT_USER_SECRET_FILE.exists():
+            with open(DEFAULT_USER_SECRET_FILE, "r") as f:
                 user_private_key = f.read().strip()
-        elif USER_SECRET_ENC_FILE.exists():
-            user_private_key = age_decrypt_file_with_passphrase(USER_SECRET_ENC_FILE)
+        elif DEFAULT_USER_SECRET_ENC_FILE.exists():
+            user_private_key = age_decrypt_file_with_passphrase(DEFAULT_USER_SECRET_ENC_FILE)
     except Exception as e:
         results.append(("WARN", f"Failed to load user private key: {e}"))
 
@@ -624,33 +679,55 @@ def cmd_doctor():
 
 
 def cmd_migrate_encrypt_user_secret():
-    """Encrypt plaintext user secret to user-secret.age.enc and delete plaintext."""
+    """Encrypt plaintext user secret to encrypted version and delete plaintext."""
+    # Determine source file from --user-secret argument or default
+    if USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE:
+        # Custom path specified via --user-secret (treated as source)
+        source_file = USER_SECRET_FILE
+        
+        if source_file.suffix == '.enc' or source_file.name.endswith('.age.enc'):
+            print(f"Error: Source file {source_file} is already encrypted")
+            sys.exit(1)
+        
+        # Derive encrypted target by adding .enc extension
+        if source_file.suffix == '.age':
+            target_file = source_file.with_suffix('.age.enc')
+        else:
+            target_file = source_file.with_suffix(source_file.suffix + '.enc')
+    else:
+        # Use default files
+        source_file = DEFAULT_USER_SECRET_FILE
+        target_file = DEFAULT_USER_SECRET_ENC_FILE
+
     # Preconditions
-    if not USER_SECRET_FILE.exists():
-        print(f"Error: Plaintext secret {USER_SECRET_FILE} not found.")
+    if not source_file.exists():
+        print(f"Error: Plaintext secret {source_file} not found.")
+        sys.exit(1)
+    
+    if target_file.exists():
+        print(f"Error: Encrypted file {target_file} already exists")
         sys.exit(1)
 
     # Run age -p to produce encrypted file
     try:
-        age_encrypt_file_with_passphrase(USER_SECRET_FILE, USER_SECRET_ENC_FILE)
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        age_encrypt_file_with_passphrase(source_file, target_file)
     except RuntimeError as e:
         print(f"Error: Failed to encrypt user secret: {e}")
         sys.exit(1)
 
     # Verify encrypted file now exists, then remove plaintext
-    if not USER_SECRET_ENC_FILE.exists():
-        print(f"Error: Failed to create {USER_SECRET_ENC_FILE}")
+    if not target_file.exists():
+        print(f"Error: Failed to create {target_file}")
         sys.exit(1)
 
     try:
-        USER_SECRET_FILE.unlink()
+        source_file.unlink()
     except OSError as e:
         print(f"Error: Encrypted file created but failed to delete plaintext: {e}")
         sys.exit(1)
 
-    print(
-        f"Migrated user secret to {USER_SECRET_ENC_FILE} and removed {USER_SECRET_FILE}"
-    )
+    print(f"Migrated user secret to {target_file} and removed {source_file}")
 
 
 def cmd_version():
@@ -664,6 +741,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Age Store",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    # Global arguments
+    parser.add_argument(
+        "--user-secret",
+        help="Path to user secret file (encrypted .enc or plain file)",
+        metavar="PATH"
     )
 
     subparsers = parser.add_subparsers(
@@ -764,6 +848,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Set the global user secret file path
+    set_user_secret_file(args.user_secret)
 
     if not args.command:
         parser.print_help()

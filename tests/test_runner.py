@@ -5,7 +5,9 @@ Age Store CLI Test Runner
 
 import argparse
 import os
+import random
 import shutil
+import string
 import subprocess
 import sys
 from pathlib import Path
@@ -27,8 +29,14 @@ class T:
 
 # Test configuration
 TESTS_DIR = Path(__file__).parent
-TMP_DATA_DIR = TESTS_DIR / "tmp-data"
-AGE_STORE_SCRIPT = TESTS_DIR.parent / "age-store.py"
+TMP_DATA_DIR = Path("tmp-data")
+AGE_STORE_SCRIPT = Path("../age-store.py")
+USER_SECRETS_DIR = Path("user-secrets")
+USER1_SECRET = Path("user-secrets/user1.age")
+USER2_SECRET = Path("user-secrets/user2.age")
+STORE_SUBDIR = Path("store")
+USERS_JSON = Path("users.json")
+MASTER_KEY_FILE = Path("master-key.age.enc")
 
 # Global verbose flag
 verbose = False
@@ -36,63 +44,63 @@ verbose = False
 
 def cleanup_and_setup():
     """Clean up tmp-data folder and create test directories."""
+    # Work from tests directory for setup
     if TMP_DATA_DIR.exists():
         shutil.rmtree(TMP_DATA_DIR)
 
     TMP_DATA_DIR.mkdir(exist_ok=True)
-    (TMP_DATA_DIR / "store0").mkdir(exist_ok=True)
-    (TMP_DATA_DIR / "store1").mkdir(exist_ok=True)
-    (TMP_DATA_DIR / "store2").mkdir(exist_ok=True)
+    (TMP_DATA_DIR / "user-secrets").mkdir(exist_ok=True)
 
 
 def run_age_store_command(
-    store_path, command, capture_output=True, input_text=None, description=None
+    command,
+    capture_output=True,
+    input_text=None,
+    description=None,
+    user_secret_path=None,
 ):
-    """Run age-store.py command in specified store directory."""
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(store_path)
-        cmd = [str(AGE_STORE_SCRIPT)] + command
+    """Run age-store.py command with working directory in tmp-data folder."""
+    cmd = [str(AGE_STORE_SCRIPT)]
 
-        # Print description if verbose mode is enabled
-        if verbose and description:
-            print(f"\n◼ {description}")
+    # Add --user-secret argument if provided
+    if user_secret_path:
+        cmd.extend(["--user-secret", str(user_secret_path)])
 
-        # Print the command being executed
-        store_name = Path(store_path).name
-        args_str = " ".join(command)
-        print(
-            f"{T.blue}{store_name}:{T.clear} {T.yellow}age-store.py {args_str}{T.clear}",
-            end="\r",
-        )
+    cmd.extend(command)
 
-        if capture_output:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, input=input_text
-            )
+    # Print description if verbose mode is enabled
+    if verbose and description:
+        print(f"\n◼ {description}")
 
-            # Rewrite the line with success/failure color
-            if result.returncode == 0:
-                command_color = T.green
-            else:
-                command_color = T.red
+    # Print the command being executed
+    user_secret_part = f"--user-secret {user_secret_path} " if user_secret_path else ""
+    args_str = f"{user_secret_part}{' '.join(command)}"
+    print(
+        f"{T.yellow}age-store.py {args_str}{T.clear}",
+        end="\r",
+    )
 
-            print(
-                f"{T.blue}{store_name}:{T.clear} {command_color}age-store.py {args_str}{T.clear}"
-            )
+    if capture_output:
+        result = subprocess.run(cmd, capture_output=True, text=True, input=input_text)
 
-            # Print output if verbose mode is enabled
-            if verbose and result.stdout.strip():
-                print_with_left_border(
-                    result.stdout.rstrip(), border_color=T.grey, text_color=T.grey
-                )
-
-            return result.returncode, result.stdout, result.stderr
+        # Rewrite the line with success/failure color
+        if result.returncode == 0:
+            command_color = T.green
         else:
-            result = subprocess.run(cmd, input=input_text, text=True)
-            return result.returncode, "", ""
-    finally:
-        os.chdir(original_cwd)
+            command_color = T.red
+
+        print(f"{command_color}age-store.py {args_str}{T.clear}")
+
+        # Print output if verbose mode is enabled
+        if verbose and result.stdout.strip():
+            print_with_left_border(
+                result.stdout.rstrip(), border_color=T.grey, text_color=T.grey
+            )
+
+        return result.returncode, result.stdout, result.stderr
+    else:
+        result = subprocess.run(cmd, input=input_text, text=True, cwd=".")
+        return result.returncode, "", ""
 
 
 def verbose_check(description, condition):
@@ -105,9 +113,9 @@ def verbose_check(description, condition):
     return condition
 
 
-def create_test_file(store_path, filename, content):
-    """Create a test file in the store directory."""
-    test_file_path = store_path / filename
+def create_test_file(filename, content):
+    """Create a test file in the current directory (tmp-data)."""
+    test_file_path = Path(filename)
     with open(test_file_path, "w") as f:
         f.write(content)
     return test_file_path
@@ -124,36 +132,154 @@ def extract_public_key(output):
     return None
 
 
-def copy_store_files(src_store, dest_store, exclude_user_secret=True):
-    """Copy store files from src to dest, optionally excluding user-secret files."""
-    src_path = Path(src_store)
-    dest_path = Path(dest_store)
+def generate_random_content():
+    """Generate random filename and content for testing."""
+    # Generate random filename
+    filename = ''.join(random.choices(string.ascii_lowercase, k=8)) + "-test.txt"
+    # Generate random content
+    content = ''.join(random.choices(string.ascii_letters + string.digits + ' ', k=20))
+    return filename, content
 
-    for item in src_path.iterdir():
-        if exclude_user_secret and item.name in (
-            "user-secret.age",
-            "user-secret.age.enc",
-        ):
-            continue
 
-        if item.is_file():
-            shutil.copy2(item, dest_path)
-        elif item.is_dir():
-            dest_subdir = dest_path / item.name
-            if dest_subdir.exists():
-                shutil.rmtree(dest_subdir)
-            shutil.copytree(item, dest_subdir)
+def test_user_has_access(user_name, user_secret_path):
+    """
+    Test that a user has full access to the store.
+    Returns (success, error_message) tuple.
+    """
+    # Generate random test data
+    test_filename, test_content = generate_random_content()
+    
+    # Create test file
+    test_file = create_test_file(test_filename, test_content)
+    
+    try:
+        # Test 1: Add file to store
+        returncode, stdout, stderr = run_age_store_command(
+            ["add", test_file.name],
+            description=f"add {test_filename} using {user_name} credentials",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(f"{user_name} can add files", returncode == 0):
+            return False, f"{user_name} cannot add files: {stderr}"
+        
+        # Check encrypted file exists
+        encrypted_file = STORE_SUBDIR / f"{test_filename}.enc"
+        if not verbose_check(f"{user_name} encrypted file was created", encrypted_file.exists()):
+            return False, f"{user_name} encrypted file not created"
+        
+        # Test 2: List files and verify new file appears
+        returncode, stdout, stderr = run_age_store_command(
+            ["ls"],
+            description=f"list files using {user_name} credentials",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(f"{user_name} can list files", returncode == 0):
+            return False, f"{user_name} cannot list files: {stderr}"
+        
+        if not verbose_check(f"{user_name} sees added file in listing", test_filename in stdout):
+            return False, f"{user_name} added file not found in listing: {stdout}"
+        
+        # Test 3: View the file content
+        returncode, stdout, stderr = run_age_store_command(
+            ["view", test_filename],
+            description=f"view {test_filename} using {user_name} credentials",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(f"{user_name} can view files", returncode == 0):
+            return False, f"{user_name} cannot view files: {stderr}"
+        
+        if not verbose_check(f"{user_name} file content matches", stdout.strip() == test_content):
+            return False, f"{user_name} file content mismatch. Expected: '{test_content}', Got: '{stdout.strip()}'"
+        
+        # Test 4: List users and verify user is included
+        returncode, stdout, stderr = run_age_store_command(
+            ["admin", "list-users"],
+            description=f"list users using {user_name} credentials",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(f"{user_name} can list users", returncode == 0):
+            return False, f"{user_name} cannot list users: {stderr}"
+        
+        if not verbose_check(f"{user_name} appears in user list", user_name in stdout):
+            return False, f"{user_name} not found in user list: {stdout}"
+        
+        return True, None
+    
+    finally:
+        # Clean up test file
+        if test_file.exists():
+            test_file.unlink()
+
+
+def test_user_has_no_access(user_name, user_secret_path):
+    """
+    Test that a user has no access to the store (all operations should fail).
+    Returns (success, error_message) tuple.
+    """
+    # Generate random test data
+    test_filename, test_content = generate_random_content()
+    
+    # Create test file
+    test_file = create_test_file(test_filename, test_content)
+    
+    try:
+        # Test 1: Add file should fail
+        returncode, stdout, stderr = run_age_store_command(
+            ["add", test_file.name],
+            description=f"try to add {test_filename} using {user_name} credentials (should fail)",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(f"{user_name} add operation fails", returncode != 0):
+            return False, f"{user_name} can still add files after removal"
+        
+        # Test 2: List files should work but not show the file we tried to add
+        returncode, stdout, stderr = run_age_store_command(
+            ["ls"],
+            description=f"list files using {user_name} credentials",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(f"{user_name} can list files", returncode == 0):
+            return False, f"{user_name} cannot list files: {stderr}"
+        
+        # Verify the file we tried to add doesn't appear in the listing
+        if not verbose_check(f"{user_name} added file not in listing", test_filename not in stdout):
+            return False, f"{user_name} unauthorized file appears in listing: {stdout}"
+        
+        # Test 3: View files should fail (try to view any existing file)
+        # Get a list of files from user1 to find an existing file to test with
+        returncode, user1_listing, stderr = run_age_store_command(
+            ["ls"],
+            description="get existing files for view test",
+            user_secret_path=USER1_SECRET,
+        )
+        if returncode == 0 and user1_listing.strip():
+            existing_files = [f.strip() for f in user1_listing.strip().split('\n') if f.strip()]
+            if existing_files:
+                test_file_to_view = existing_files[0]
+                returncode, stdout, stderr = run_age_store_command(
+                    ["view", test_file_to_view],
+                    description=f"try to view {test_file_to_view} using {user_name} credentials (should fail)",
+                    user_secret_path=user_secret_path,
+                )
+                if not verbose_check(f"{user_name} view operation fails", returncode != 0):
+                    return False, f"{user_name} can still view files after removal"
+        
+        
+        return True, None
+    
+    finally:
+        # Clean up test file
+        if test_file.exists():
+            test_file.unlink()
 
 
 def test_init_and_bootstrap():
     """Test basic init-user and admin bootstrap functionality."""
-    store0_path = TMP_DATA_DIR / "store0"
-
-    # Test init-user
+    # Test init-user - create user1 secret
     returncode, stdout, stderr = run_age_store_command(
-        store0_path,
         ["init-user", "--unencrypted"],
-        description="initialize user with unencrypted private key",
+        description="initialize user1 with unencrypted private key",
+        user_secret_path=USER1_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"init-user failed: {stderr}"
@@ -164,199 +290,124 @@ def test_init_and_bootstrap():
     ):
         return False, f"init-user output unexpected: {stdout}"
 
-    # Check that user-secret.age was created
-    user_secret_file = store0_path / "user-secret.age"
-    if not verbose_check("user-secret.age file was created", user_secret_file.exists()):
-        return False, "user-secret.age not created"
+    # Check that user1 secret file was created
+    if not verbose_check("user1 secret file was created", USER1_SECRET.exists()):
+        return False, "user1 secret not created"
 
-    # Get public key for bootstrap
-    returncode, pubkey_stdout, stderr = run_age_store_command(
-        store0_path, ["show-pubkey"], description="get the user's public key"
+    # Test init-user - create user2 secret
+    returncode, stdout, stderr = run_age_store_command(
+        ["init-user", "--unencrypted"],
+        description="initialize user2 with unencrypted private key",
+        user_secret_path=USER2_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
-        return False, f"show-pubkey failed: {stderr}"
+        return False, f"init-user user2 failed: {stderr}"
 
-    pubkey = extract_public_key(pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", pubkey is not None):
-        return False, f"No valid public key found in output: {pubkey_stdout}"
+    if not verbose_check(
+        "output contains completion message",
+        "User initialization complete (unencrypted)" in stdout,
+    ):
+        return False, f"init-user user2 output unexpected: {stdout}"
+
+    # Check that user2 secret file was created
+    if not verbose_check("user2 secret file was created", USER2_SECRET.exists()):
+        return False, "user2 secret not created"
+
+    # Get public keys and verify they are different
+    returncode, user1_pubkey_stdout, stderr = run_age_store_command(
+        ["show-pubkey"],
+        description="get user1's public key",
+        user_secret_path=USER1_SECRET,
+    )
+    if not verbose_check("command succeeded", returncode == 0):
+        return False, f"show-pubkey user1 failed: {stderr}"
+
+    user1_pubkey = extract_public_key(user1_pubkey_stdout)
+    if not verbose_check("output contains valid age1 public key", user1_pubkey is not None):
+        return False, f"No valid public key found in user1 output: {user1_pubkey_stdout}"
+
+    returncode, user2_pubkey_stdout, stderr = run_age_store_command(
+        ["show-pubkey"],
+        description="get user2's public key",
+        user_secret_path=USER2_SECRET,
+    )
+    if not verbose_check("command succeeded", returncode == 0):
+        return False, f"show-pubkey user2 failed: {stderr}"
+
+    user2_pubkey = extract_public_key(user2_pubkey_stdout)
+    if not verbose_check("output contains valid age1 public key", user2_pubkey is not None):
+        return False, f"No valid public key found in user2 output: {user2_pubkey_stdout}"
+
+    # Verify user1 and user2 have different public keys
+    if not verbose_check("user1 and user2 have different public keys", user1_pubkey != user2_pubkey):
+        return False, f"user1 and user2 have identical public keys: {user1_pubkey}"
+
+    # Use user1 public key for bootstrap
+    pubkey = user1_pubkey
 
     # Test bootstrap
     returncode, stdout, stderr = run_age_store_command(
-        store0_path,
         ["admin", "bootstrap", "user1"],
         description="bootstrap the store with user1",
+        user_secret_path=USER1_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"bootstrap failed: {stderr}"
 
     # Check that store directory and files were created
-    if not verbose_check(
-        "store directory was created", (store0_path / "store").exists()
-    ):
+    if not verbose_check("store directory was created", STORE_SUBDIR.exists()):
         return False, "store directory not created"
 
-    if not verbose_check(
-        "users.json was created", (store0_path / "users.json").exists()
-    ):
+    if not verbose_check("users.json was created", USERS_JSON.exists()):
         return False, "users.json not created"
 
-    if not verbose_check(
-        "master-key.age.enc was created", (store0_path / "master-key.age.enc").exists()
-    ):
+    if not verbose_check("master-key.age.enc was created", MASTER_KEY_FILE.exists()):
         return False, "master-key.age.enc not created"
 
     return True, None
 
 
-def setup_stores():
-    """Set up store1 (fully initialized) and store2 (init-user only)."""
-    store1_path = TMP_DATA_DIR / "store1"
-    store2_path = TMP_DATA_DIR / "store2"
 
-    # Setup store1
-    returncode, stdout, stderr = run_age_store_command(
-        store1_path,
-        ["init-user", "--unencrypted"],
-        description="initialize store1 user",
-    )
-    if returncode != 0:
-        raise RuntimeError(f"Failed to init store1: {stderr}")
 
+def test_user1_access():
+    """Test user1 can add, view, and list files."""
+    return test_user_has_access("user1", USER1_SECRET)
+
+
+def test_add_and_list_users():
+    """Test adding user2 to the store and listing users."""
+    # Get user2's public key
     returncode, pubkey_stdout, stderr = run_age_store_command(
-        store1_path, ["show-pubkey"], description="get store1 public key"
-    )
-    if returncode != 0:
-        raise RuntimeError(f"Failed to get store1 pubkey: {stderr}")
-
-    store1_pubkey = extract_public_key(pubkey_stdout)
-    if not store1_pubkey:
-        raise RuntimeError(
-            f"No valid public key found in store1 output: {pubkey_stdout}"
-        )
-    returncode, stdout, stderr = run_age_store_command(
-        store1_path,
-        ["admin", "bootstrap", "user1"],
-        description="bootstrap store1 with user1",
-    )
-    if returncode != 0:
-        raise RuntimeError(f"Failed to bootstrap store1: {stderr}")
-
-    # Setup store2 (init-user only)
-    returncode, stdout, stderr = run_age_store_command(
-        store2_path,
-        ["init-user", "--unencrypted"],
-        description="initialize store2 user",
-    )
-    if returncode != 0:
-        raise RuntimeError(f"Failed to init store2: {stderr}")
-
-    return store1_pubkey
-
-
-def test_store1_add():
-    """Test adding files to store1."""
-    store1_path = TMP_DATA_DIR / "store1"
-
-    # Create test file
-    test_file = create_test_file(store1_path, "test-secret.txt", "secret content")
-
-    # Add file to store
-    returncode, stdout, stderr = run_age_store_command(
-        store1_path,
-        ["add", test_file.name],
-        description="add test-secret.txt to the encrypted store",
+        ["show-pubkey"],
+        description="get user2's public key",
+        user_secret_path=USER2_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
-        return False, f"add command failed: {stderr}"
+        return False, f"Failed to get user2 pubkey: {stderr}"
 
-    # Check that encrypted file exists
-    encrypted_file = store1_path / "store" / "test-secret.txt.enc"
-    if not verbose_check("encrypted file was created", encrypted_file.exists()):
-        return False, "Encrypted file was not created"
-
-    # Clean up test file
-    test_file.unlink()
-
-    return True, None
-
-
-def test_store1_view():
-    """Test viewing files from store1."""
-    store1_path = TMP_DATA_DIR / "store1"
-
-    # View the file we added
-    returncode, stdout, stderr = run_age_store_command(
-        store1_path,
-        ["view", "test-secret.txt"],
-        description="view the encrypted test-secret.txt file",
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"view command failed: {stderr}"
-
-    if not verbose_check("output contains secret content", "secret content" in stdout):
-        return False, f"File content not found in output: {stdout}"
-
-    return True, None
-
-
-def test_store1_ls():
-    """Test listing files in store1."""
-    store1_path = TMP_DATA_DIR / "store1"
-
-    returncode, stdout, stderr = run_age_store_command(
-        store1_path, ["ls"], description="list all files in the store"
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"ls command failed: {stderr}"
-
+    user2_pubkey = extract_public_key(pubkey_stdout)
     if not verbose_check(
-        "output contains test-secret.txt", "test-secret.txt" in stdout
+        "output contains valid age1 public key", user2_pubkey is not None
     ):
-        return False, f"Added file not found in ls output: {stdout}"
+        return False, f"No valid public key found in user2 output: {pubkey_stdout}"
 
-    return True, None
-
-
-def test_add_user():
-    """Test adding store2 user to store1."""
-    store1_path = TMP_DATA_DIR / "store1"
-    store2_path = TMP_DATA_DIR / "store2"
-
-    # Get store2's public key
-    returncode, pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"], description="get store2's public key"
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"Failed to get store2 pubkey: {stderr}"
-
-    store2_pubkey = extract_public_key(pubkey_stdout)
-    if not verbose_check(
-        "output contains valid age1 public key", store2_pubkey is not None
-    ):
-        return False, f"No valid public key found in store2 output: {pubkey_stdout}"
-
-    # Add store2 user to store1
+    # Add user2 to the store (using user1's credentials)
     returncode, stdout, stderr = run_age_store_command(
-        store1_path,
-        ["admin", "add-user", "user2", store2_pubkey],
-        description="add user2 to store1's user list",
+        ["admin", "add-user", "user2", user2_pubkey],
+        description="add user2 to the store's user list",
+        user_secret_path=USER1_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"add-user failed: {stderr}"
 
-    return True, None
-
-
-def test_list_users():
-    """Test listing users after adding both users."""
-    store1_path = TMP_DATA_DIR / "store1"
-
-    # List users in store1
+    # Test listing users with user1 credentials
     returncode, stdout, stderr = run_age_store_command(
-        store1_path, ["admin", "list-users"], description="list all users"
+        ["admin", "list-users"],
+        description="list all users using user1 credentials",
+        user_secret_path=USER1_SECRET,
     )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"list-users failed: {stderr}"
+    if not verbose_check("user1 can list users", returncode == 0):
+        return False, f"user1 list-users failed: {stderr}"
 
     # Should contain both users
     if not verbose_check("output contains user1", "user1" in stdout):
@@ -372,195 +423,149 @@ def test_list_users():
         1 for line in lines if line.strip() and ("user1" in line or "user2" in line)
     )
 
-    if user_count != 2:
+    if not verbose_check("exactly 2 users found", user_count == 2):
         return False, f"Expected exactly 2 users, found {user_count}: {stdout}"
 
+    # Test that user2 can also list users
+    returncode, stdout, stderr = run_age_store_command(
+        ["admin", "list-users"],
+        description="list all users using user2 credentials",
+        user_secret_path=USER2_SECRET,
+    )
+    if not verbose_check("user2 can list users", returncode == 0):
+        return False, f"user2 list-users failed: {stderr}"
+
+    # Should contain both users when user2 lists them
+    if not verbose_check("user2 sees user1 in listing", "user1" in stdout):
+        return False, f"user1 not found in user2's list-users output: {stdout}"
+
+    if not verbose_check("user2 sees user2 in listing", "user2" in stdout):
+        return False, f"user2 not found in user2's list-users output: {stdout}"
+
     return True, None
 
 
-def test_store2_access_after_copy():
-    """Test that store2 can access files after copying store data."""
-    store1_path = TMP_DATA_DIR / "store1"
-    store2_path = TMP_DATA_DIR / "store2"
-
-    # Store original store2 pubkey for verification
-    returncode, original_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"], description="get original store2 public key"
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"Failed to get original store2 pubkey: {stderr}"
-
-    original_pubkey = extract_public_key(original_pubkey_stdout)
-    if not verbose_check(
-        "output contains valid age1 public key", original_pubkey is not None
-    ):
-        return False, f"No valid original pubkey found: {original_pubkey_stdout}"
-
-    # Copy store1 files to store2 (excluding user-secret)
-    copy_store_files(store1_path, store2_path, exclude_user_secret=True)
-
-    # Verify store2 pubkey hasn't changed
-    returncode, current_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"], description="verify store2 public key after copy"
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"Failed to get current store2 pubkey: {stderr}"
-
-    current_pubkey = extract_public_key(current_pubkey_stdout)
-    if not verbose_check(
-        "output contains valid age1 public key", current_pubkey is not None
-    ):
-        return False, f"No valid current pubkey found: {current_pubkey_stdout}"
-
-    if not verbose_check(
-        "public key unchanged after copy", original_pubkey == current_pubkey
-    ):
-        return (
-            False,
-            f"Store2 pubkey changed after copy: {original_pubkey} -> {current_pubkey}",
-        )
-
-    # Test that store2 can now access the files
-    returncode, stdout, stderr = run_age_store_command(
-        store2_path, ["ls"], description="list files from store2 after copy"
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"store2 ls failed: {stderr}"
-
-    if not verbose_check(
-        "output contains test-secret.txt", "test-secret.txt" in stdout
-    ):
-        return False, f"store2 cannot see files: {stdout}"
-
-    # Test view
-    returncode, stdout, stderr = run_age_store_command(
-        store2_path,
-        ["view", "test-secret.txt"],
-        description="view test-secret.txt from store2",
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"store2 view failed: {stderr}"
-
-    if not verbose_check("output contains secret content", "secret content" in stdout):
-        return False, f"store2 cannot read file content: {stdout}"
-
-    # Test add
-    test_file = create_test_file(store2_path, "store2-secret.txt", "store2 content")
-    returncode, stdout, stderr = run_age_store_command(
-        store2_path,
-        ["add", test_file.name],
-        description="add store2-secret.txt from store2",
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"store2 add failed: {stderr}"
-
-    test_file.unlink()
-
-    return True, None
+def test_user2_access():
+    """Test that user2 can access files after being added to the store."""
+    return test_user_has_access("user2", USER2_SECRET)
 
 
 def test_master_key_rotation():
     """Test master key rotation and file re-encryption."""
-    store1_path = TMP_DATA_DIR / "store1"
-    store2_path = TMP_DATA_DIR / "store2"
-
-    # Get original encrypted file content
-    encrypted_file = store1_path / "store" / "test-secret.txt.enc"
-    with open(encrypted_file, "rb") as f:
-        original_content = f.read()
-
-    # Rotate master key in store1
+    # Add two random files before rotation
+    test_file1_name, test_file1_content = generate_random_content()
+    test_file2_name, test_file2_content = generate_random_content()
+    
+    test_file1 = create_test_file(test_file1_name, test_file1_content)
+    test_file2 = create_test_file(test_file2_name, test_file2_content)
+    
+    # Add first file using user1
     returncode, stdout, stderr = run_age_store_command(
-        store1_path,
+        ["add", test_file1.name],
+        description=f"add {test_file1_name} before rotation",
+        user_secret_path=USER1_SECRET,
+    )
+    if not verbose_check("file1 added successfully", returncode == 0):
+        return False, f"Failed to add file1 before rotation: {stderr}"
+    
+    # Add second file using user2
+    returncode, stdout, stderr = run_age_store_command(
+        ["add", test_file2.name],
+        description=f"add {test_file2_name} before rotation",
+        user_secret_path=USER2_SECRET,
+    )
+    if not verbose_check("file2 added successfully", returncode == 0):
+        return False, f"Failed to add file2 before rotation: {stderr}"
+    
+    # Clean up original test files
+    test_file1.unlink()
+    test_file2.unlink()
+    
+    # Get file listing before rotation
+    returncode, listing_before, stderr = run_age_store_command(
+        ["ls"],
+        description="get file listing before rotation",
+        user_secret_path=USER1_SECRET,
+    )
+    if not verbose_check("listing before rotation succeeded", returncode == 0):
+        return False, f"Failed to get listing before rotation: {stderr}"
+    
+    # Get original encrypted file contents
+    encrypted_files = {}
+    for filename in [test_file1_name, test_file2_name]:
+        encrypted_file = STORE_SUBDIR / f"{filename}.enc"
+        if encrypted_file.exists():
+            with open(encrypted_file, "rb") as f:
+                encrypted_files[filename] = f.read()
+
+    # Rotate master key (using user1 credentials)
+    returncode, stdout, stderr = run_age_store_command(
         ["admin", "rotate-master-key"],
         description="rotate the master key and re-encrypt all files",
+        user_secret_path=USER1_SECRET,
     )
-    if not verbose_check("command succeeded", returncode == 0):
+    if not verbose_check("key rotation succeeded", returncode == 0):
         return False, f"rotate-master-key failed: {stderr}"
 
-    # Verify encrypted file content changed
-    with open(encrypted_file, "rb") as f:
-        new_content = f.read()
+    # Verify encrypted file contents changed
+    for filename, original_content in encrypted_files.items():
+        encrypted_file = STORE_SUBDIR / f"{filename}.enc"
+        with open(encrypted_file, "rb") as f:
+            new_content = f.read()
+        
+        if original_content == new_content:
+            return False, f"Encrypted file {filename} content didn't change after key rotation"
 
-    if original_content == new_content:
-        return False, "Encrypted file content didn't change after key rotation"
-
-    # Store original store2 pubkey
-    returncode, original_pubkey_stdout, stderr = run_age_store_command(
-        store2_path,
-        ["show-pubkey"],
-        description="get store2 public key before rotation",
+    # Get file listing after rotation
+    returncode, listing_after, stderr = run_age_store_command(
+        ["ls"],
+        description="get file listing after rotation",
+        user_secret_path=USER1_SECRET,
     )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"Failed to get store2 pubkey before copy: {stderr}"
+    if not verbose_check("listing after rotation succeeded", returncode == 0):
+        return False, f"Failed to get listing after rotation: {stderr}"
+    
+    # Verify file listing is the same before and after rotation
+    if not verbose_check("file listing unchanged after rotation", set(listing_before.strip().split('\n')) == set(listing_after.strip().split('\n'))):
+        return False, f"File listing changed after rotation.\nBefore: {listing_before}\nAfter: {listing_after}"
 
-    original_pubkey = extract_public_key(original_pubkey_stdout)
-    if not verbose_check(
-        "output contains valid age1 public key", original_pubkey is not None
-    ):
-        return False, f"No valid original pubkey found: {original_pubkey_stdout}"
-
-    # Copy rotated store1 files to store2
-    copy_store_files(store1_path, store2_path, exclude_user_secret=True)
-
-    # Verify store2 pubkey hasn't changed
-    returncode, current_pubkey_stdout, stderr = run_age_store_command(
-        store2_path,
-        ["show-pubkey"],
-        description="verify store2 public key after rotation copy",
-    )
-    if not verbose_check("command succeeded", returncode == 0):
-        return False, f"Failed to get store2 pubkey after copy: {stderr}"
-
-    current_pubkey = extract_public_key(current_pubkey_stdout)
-    if not verbose_check(
-        "output contains valid age1 public key", current_pubkey is not None
-    ):
-        return (
-            False,
-            f"No valid current pubkey found after copy: {current_pubkey_stdout}",
-        )
-
-    if not verbose_check(
-        "public key unchanged after rotation", original_pubkey == current_pubkey
-    ):
-        return (
-            False,
-            f"Store2 pubkey changed after copy: {original_pubkey} -> {current_pubkey}",
-        )
-
-    # Test that both store1 and store2 can still access files
-    for store_name, store_path in [("store1", store1_path), ("store2", store2_path)]:
-        returncode, stdout, stderr = run_age_store_command(
-            store_path,
-            ["view", "test-secret.txt"],
-            description=f"verify {store_name} can access file after rotation",
-        )
-        if not verbose_check("command succeeded", returncode == 0):
-            return False, f"{store_name} cannot access file after rotation: {stderr}"
-
-        if not verbose_check(
-            "output contains secret content", "secret content" in stdout
-        ):
-            return (
-                False,
-                f"{store_name} file content incorrect after rotation: {stdout}",
+    # Test that both user1 and user2 can still access both files after rotation
+    test_cases = [
+        (test_file1_name, test_file1_content),
+        (test_file2_name, test_file2_content)
+    ]
+    
+    for filename, expected_content in test_cases:
+        for user_name, user_secret in [("user1", USER1_SECRET), ("user2", USER2_SECRET)]:
+            returncode, stdout, stderr = run_age_store_command(
+                ["view", filename],
+                description=f"verify {user_name} can access {filename} after rotation",
+                user_secret_path=user_secret,
             )
+            if not verbose_check(f"{user_name} can access {filename}", returncode == 0):
+                return False, f"{user_name} cannot access {filename} after rotation: {stderr}"
+
+            if not verbose_check(
+                f"{user_name} {filename} content matches", stdout.strip() == expected_content
+            ):
+                return (
+                    False,
+                    f"{user_name} {filename} content mismatch after rotation. Expected: '{expected_content}', Got: '{stdout.strip()}'",
+                )
 
     return True, None
 
 
 def test_user_removal():
     """Test removing user access and verifying access is lost."""
-    store1_path = TMP_DATA_DIR / "store1"
-    store2_path = TMP_DATA_DIR / "store2"
-
-    # Store original store2 pubkey
+    # Store original user2 pubkey
     returncode, original_pubkey_stdout, stderr = run_age_store_command(
-        store2_path, ["show-pubkey"], description="get store2 public key before removal"
+        ["show-pubkey"],
+        description="get user2 public key before removal",
+        user_secret_path=USER2_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
-        return False, f"Failed to get store2 pubkey: {stderr}"
+        return False, f"Failed to get user2 pubkey: {stderr}"
 
     original_pubkey = extract_public_key(original_pubkey_stdout)
     if not verbose_check(
@@ -568,26 +573,23 @@ def test_user_removal():
     ):
         return False, f"No valid original pubkey found: {original_pubkey_stdout}"
 
-    # Remove store2 user from store1
+    # Remove user2 from store (using user1 credentials)
     returncode, stdout, stderr = run_age_store_command(
-        store1_path,
         ["admin", "remove-user", "user2"],
-        description="remove user2 from store1",
+        description="remove user2 from store",
+        user_secret_path=USER1_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
         return False, f"remove-user failed: {stderr}"
 
-    # Copy store1 files to store2 (excluding user-secret)
-    copy_store_files(store1_path, store2_path, exclude_user_secret=True)
-
-    # Verify store2 pubkey hasn't changed
+    # Verify user2 pubkey hasn't changed
     returncode, current_pubkey_stdout, stderr = run_age_store_command(
-        store2_path,
         ["show-pubkey"],
-        description="verify store2 public key after removal",
+        description="verify user2 public key after removal",
+        user_secret_path=USER2_SECRET,
     )
     if not verbose_check("command succeeded", returncode == 0):
-        return False, f"Failed to get store2 pubkey after removal: {stderr}"
+        return False, f"Failed to get user2 pubkey after removal: {stderr}"
 
     current_pubkey = extract_public_key(current_pubkey_stdout)
     if not verbose_check(
@@ -603,31 +605,13 @@ def test_user_removal():
     ):
         return (
             False,
-            f"Store2 pubkey changed after copy: {original_pubkey} -> {current_pubkey}",
+            f"User2 pubkey changed after removal: {original_pubkey} -> {current_pubkey}",
         )
 
-    # Test that store2 has lost access
-    returncode, stdout, stderr = run_age_store_command(
-        store2_path,
-        ["view", "test-secret.txt"],
-        description="try to view test-secret.txt from store2 (should fail)",
-    )
-    if not verbose_check("command failed as expected", returncode != 0):
-        return False, "Store2 can still access files after user removal"
-
-    # Test that store2 cannot add files
-    test_file = create_test_file(
-        store2_path, "unauthorized-secret.txt", "unauthorized content"
-    )
-    returncode, stdout, stderr = run_age_store_command(
-        store2_path,
-        ["add", test_file.name],
-        description="try to add unauthorized-secret.txt from store2 (should fail)",
-    )
-    if not verbose_check("command failed as expected", returncode != 0):
-        return False, "Store2 can still add files after user removal"
-
-    test_file.unlink()
+    # Test that user2 has lost access using the no access test function
+    success, error_message = test_user_has_no_access("user2", USER2_SECRET)
+    if not success:
+        return False, error_message
 
     return True, None
 
@@ -713,12 +697,15 @@ def main():
     print("Setting up test environment...")
     cleanup_and_setup()
 
+    # Change to tmp-data directory for consistent working directory
+    os.chdir(TMP_DATA_DIR)
+
     # Track test results
     passed = 0
     total = 0
 
     # Calculate total tests
-    total_test_count = 9  # Update this if you add/remove tests
+    total_test_count = 6  # Update this if you add/remove tests
 
     # Basic init and bootstrap tests
     total += 1
@@ -730,22 +717,12 @@ def main():
     elif result is None:
         total -= 1  # Don't count skipped tests
 
-    # Setup stores for remaining tests
-    try:
-        print("Setting up test stores...")
-        store1_pubkey = setup_stores()
-    except Exception as e:
-        print(f"Failed to setup stores: {e}")
-        sys.exit(1)
 
-    # Store1 functionality tests
+    # User functionality tests
     tests = [
-        ("test_store1_add", test_store1_add),
-        ("test_store1_view", test_store1_view),
-        ("test_store1_ls", test_store1_ls),
-        ("test_add_user", test_add_user),
-        ("test_list_users", test_list_users),
-        ("test_store2_access_after_copy", test_store2_access_after_copy),
+        ("test_user1_access", test_user1_access),
+        ("test_add_and_list_users", test_add_and_list_users),
+        ("test_user2_access", test_user2_access),
         ("test_master_key_rotation", test_master_key_rotation),
         ("test_user_removal", test_user_removal),
     ]
