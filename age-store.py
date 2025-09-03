@@ -167,17 +167,20 @@ def age_decrypt_file_with_passphrase(input_path: Path) -> str:
     return out.decode().strip()
 
 
-def check_unencrypted_user_secret_permissions() -> bool:
-    """Check if unencrypted user secret file has secure permissions.
+def check_file_is_world_accessible(file_path: Path) -> bool:
+    """Check if file is accessible by group or others (world accessible).
 
-    Returns False if permissions are too open (readable by group or others).
-    Returns True if permissions are secure (owner-only).
+    Args:
+        file_path: Path to check
+
+    Returns True if file is readable by group or others (world accessible).
+    Returns False if file is secure (owner-only) or doesn't exist.
     """
-    if not USER_SECRET_FILE.exists():
-        return True  # No file means no permission issue
+    if not file_path.exists():
+        return False  # No file means not accessible
 
-    file_stat = USER_SECRET_FILE.stat()
-    return not (file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH))
+    file_stat = file_path.stat()
+    return bool(file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH))
 
 
 def read_user_secret() -> str:
@@ -207,7 +210,7 @@ def read_user_secret() -> str:
         )
 
         # Check permissions
-        if not check_unencrypted_user_secret_permissions():
+        if check_file_is_world_accessible(USER_SECRET_FILE):
             print(
                 f"Error: User secret file {USER_SECRET_FILE} is readable by group or others"
             )
@@ -611,8 +614,7 @@ def cmd_doctor():
         results.append(
             ("WARN", f"Unencrypted user secret present at {DEFAULT_USER_SECRET_FILE}")
         )
-        file_stat = DEFAULT_USER_SECRET_FILE.stat()
-        if file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
+        if check_file_is_world_accessible(DEFAULT_USER_SECRET_FILE):
             results.append(
                 (
                     "ERROR",
