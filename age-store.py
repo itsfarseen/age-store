@@ -10,6 +10,7 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
+from shutil import which
 
 # Constants
 VERSION = 0.2
@@ -144,6 +145,19 @@ def age_decrypt_file_with_passphrase(input_path: Path) -> str:
     return out.decode().strip()
 
 
+def check_unencrypted_user_secret_permissions() -> bool:
+    """Check if unencrypted user secret file has secure permissions.
+    
+    Returns False if permissions are too open (readable by group or others).
+    Returns True if permissions are secure (owner-only).
+    """
+    if not USER_SECRET_FILE.exists():
+        return True  # No file means no permission issue
+        
+    file_stat = USER_SECRET_FILE.stat()
+    return not (file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH))
+
+
 def read_user_secret() -> str:
     """Read user secret from unencrypted or encrypted storage.
 
@@ -158,15 +172,10 @@ def read_user_secret() -> str:
         )
 
         # Check permissions
-        file_stat = USER_SECRET_FILE.stat()
-        permissions = stat.filemode(file_stat.st_mode)
-
-        # Check if group or others have read permissions
-        if file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
+        if not check_unencrypted_user_secret_permissions():
             print(
                 f"Error: User secret file {USER_SECRET_FILE} is readable by group or others"
             )
-            print(f"Current permissions: {permissions}")
             print(f"Fix with: chmod 600 {USER_SECRET_FILE}")
             sys.exit(1)
 
@@ -544,6 +553,74 @@ def cmd_list_store():
         print("  No secrets found")
 
 
+def cmd_doctor():
+    """Run health checks and print a bullet list of results."""
+    results: list[tuple[str, str]] = []
+
+    # Check age and age-keygen presence without exiting
+    if which("age") is None:
+        results.append(("ERROR", "'age' not found in PATH"))
+    else:
+        results.append(("OK", "'age' is installed"))
+    if which("age-keygen") is None:
+        results.append(("ERROR", "'age-keygen' not found in PATH"))
+    else:
+        results.append(("OK", "'age-keygen' is installed"))
+
+    # Secret encryption status and permissions
+    if USER_SECRET_FILE.exists():
+        results.append(("WARN", f"Unencrypted user secret present at {USER_SECRET_FILE}"))
+        if not check_unencrypted_user_secret_permissions():
+            results.append(("ERROR", f"Permissions for {USER_SECRET_FILE} are too open; run: chmod 600 {USER_SECRET_FILE}"))
+        else:
+            results.append(("OK", f"Permissions for {USER_SECRET_FILE} are 600 (owner-only)"))
+    elif USER_SECRET_ENC_FILE.exists():
+        results.append(("OK", f"User secret is encrypted ({USER_SECRET_ENC_FILE})"))
+    else:
+        results.append(("WARN", "No user secret found (run 'init-user')"))
+
+    # Attempt to load current user's private key (may prompt if encrypted)
+    user_private_key: str | None = None
+    try:
+        if USER_SECRET_FILE.exists():
+            with open(USER_SECRET_FILE, "r") as f:
+                user_private_key = f.read().strip()
+        elif USER_SECRET_ENC_FILE.exists():
+            user_private_key = age_decrypt_file_with_passphrase(USER_SECRET_ENC_FILE)
+    except Exception as e:
+        results.append(("WARN", f"Failed to load user private key: {e}"))
+
+    # Check users list membership
+    try:
+        users_cfg = load_users_config()
+        if user_private_key:
+            pub = age_keygen_public_from_private(user_private_key)
+            if pub in users_cfg.values():
+                results.append(("OK", "Current user is listed in users.json"))
+            else:
+                results.append(("WARN", "Current user is not listed in users.json"))
+        else:
+            results.append(("WARN", "Skipped users.json check (no user key loaded)"))
+    except Exception as e:
+        results.append(("WARN", f"Failed to check users.json: {e}"))
+
+    # Check master key decryption
+    if MASTER_KEY_FILE.exists():
+        if user_private_key:
+            try:
+                _ = age_decrypt_file_with_identity(MASTER_KEY_FILE, user_private_key)
+                results.append(("OK", "Can decrypt master key"))
+            except Exception as e:
+                results.append(("WARN", f"Failed to decrypt master key: {e}"))
+        else:
+            results.append(("WARN", "Skipped master key decrypt check (no user key loaded)"))
+    else:
+        results.append(("WARN", f"Master key file not found at {MASTER_KEY_FILE} (not bootstrapped?)"))
+
+    # Print results
+    for level, msg in results:
+        print(f"- {level}: {msg}")
+
 def cmd_migrate_encrypt_user_secret():
     """Encrypt plaintext user secret to user-secret.age.enc and delete plaintext."""
     # Preconditions
@@ -607,6 +684,9 @@ def main():
 
     # Version command
     subparsers.add_parser("version", help="Print the current version")
+
+    # Doctor command
+    subparsers.add_parser("doctor", help="Run health checks and show results")
 
     # List files command
     subparsers.add_parser("ls", help="List all available files")
@@ -721,6 +801,8 @@ def main():
                 cmd_migrate_encrypt_user_secret()
         elif args.command == "version":
             cmd_version()
+        elif args.command == "doctor":
+            cmd_doctor()
     except KeyboardInterrupt:
         print("\nOperation cancelled")
         sys.exit(1)

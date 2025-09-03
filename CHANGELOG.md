@@ -11,6 +11,7 @@
 - Show a warning when an unencrypted keypair (`user-secret.age`) is used.
 
 **Other changes**
+- Add `doctor` command to run health checks.
 - Support encrypting and decrypting binary files.
 - Add `version` command.
 - Command renames: `list-files` → `ls`, `view-file` → `view`, `add-file` → `add`.
