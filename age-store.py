@@ -234,20 +234,13 @@ def re_encrypt_all_secrets(old_master_private_key: str, new_master_public_key: s
     """Re-encrypt all secrets in the store with a new master key."""
     print("Re-encrypting secrets with new master key...")
     for secret_file in STORE_DIR.glob("*.enc"):
-        try:
-            # Decrypt with old master key
-            content = age_decrypt_file_with_identity(
-                secret_file, old_master_private_key
-            )
+        # Decrypt with old master key
+        content = age_decrypt_file_with_identity(secret_file, old_master_private_key)
 
-            # Re-encrypt with new master public key directly to the same file
-            age_encrypt_recipients_to_file(
-                content, [new_master_public_key], secret_file
-            )
+        # Re-encrypt with new master public key directly to the same file
+        age_encrypt_recipients_to_file(content, [new_master_public_key], secret_file)
 
-            print(f"Re-encrypted: {secret_file}")
-        except RuntimeError as e:
-            print(f"Warning: Failed to re-encrypt {secret_file}: {e}")
+        print(f"Re-encrypted: {secret_file}")
 
 
 # Commands
