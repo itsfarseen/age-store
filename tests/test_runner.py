@@ -137,9 +137,6 @@ def extract_public_key(output):
         # Look for line starting with "age1" directly
         if line.startswith("age1"):
             return line
-        # Also look for "Age public key: " prefix
-        elif line.startswith("Age public key: "):
-            return line.split("Age public key: ")[1].strip()
     return None
 
 

@@ -168,7 +168,8 @@ def read_user_secret() -> str:
     if USER_SECRET_FILE.exists():
         # Warn if using unencrypted secret file
         print(
-            f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (user-secret.age.enc)."
+            f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (user-secret.age.enc).",
+            file=sys.stderr
         )
 
         # Check permissions
@@ -513,7 +514,7 @@ def cmd_show_pubkey():
     # Get user's public key from private key
     try:
         public_key = age_keygen_public_from_private(user_private_key)
-        print(f"Age public key: {public_key}")
+        print(public_key)
     except RuntimeError as e:
         print(f"Error: Failed to derive public key: {e}")
         sys.exit(1)
