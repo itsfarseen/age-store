@@ -147,13 +147,13 @@ def age_decrypt_file_with_passphrase(input_path: Path) -> str:
 
 def check_unencrypted_user_secret_permissions() -> bool:
     """Check if unencrypted user secret file has secure permissions.
-    
+
     Returns False if permissions are too open (readable by group or others).
     Returns True if permissions are secure (owner-only).
     """
     if not USER_SECRET_FILE.exists():
         return True  # No file means no permission issue
-        
+
     file_stat = USER_SECRET_FILE.stat()
     return not (file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH))
 
@@ -227,6 +227,26 @@ def get_all_users() -> list[str]:
     """Get list of all users with access to secrets."""
     users_config = load_users_config()
     return list(users_config.keys())
+
+
+def re_encrypt_all_secrets(old_master_private_key: str, new_master_public_key: str):
+    """Re-encrypt all secrets in the store with a new master key."""
+    print("Re-encrypting secrets with new master key...")
+    for secret_file in STORE_DIR.glob("*.enc"):
+        try:
+            # Decrypt with old master key
+            content = age_decrypt_file_with_identity(
+                secret_file, old_master_private_key
+            )
+
+            # Re-encrypt with new master public key directly to the same file
+            age_encrypt_recipients_to_file(
+                content, [new_master_public_key], secret_file
+            )
+
+            print(f"Re-encrypted: {secret_file}")
+        except RuntimeError as e:
+            print(f"Warning: Failed to re-encrypt {secret_file}: {e}")
 
 
 # Commands
@@ -385,21 +405,7 @@ def cmd_remove_user(username: str):
 
         # Re-encrypt all secrets with new master key
         print("Regenerating master key and re-encrypting secrets...")
-        for secret_file in STORE_DIR.glob("*.enc"):
-            try:
-                # Decrypt with old master key
-                content = age_decrypt_file_with_identity(
-                    secret_file, old_master_private_key
-                )
-
-                # Re-encrypt with new master public key directly to the same file
-                age_encrypt_recipients_to_file(
-                    content, [new_master_public_key], secret_file
-                )
-
-                print(f"Re-encrypted: {secret_file}")
-            except RuntimeError as e:
-                print(f"Warning: Failed to re-encrypt {secret_file}: {e}")
+        re_encrypt_all_secrets(old_master_private_key, new_master_public_key)
 
         # Encrypt new master private key for remaining users
         remaining_recipients = list(users_config.values())
@@ -432,22 +438,7 @@ def cmd_rotate_master_key():
         return
 
     # Re-encrypt all secrets with new master key
-    print("Re-encrypting secrets with new master key...")
-    for secret_file in STORE_DIR.glob("*.enc"):
-        try:
-            # Decrypt with old master key
-            content = age_decrypt_file_with_identity(
-                secret_file, old_master_private_key
-            )
-
-            # Re-encrypt with new master public key directly to the same file
-            age_encrypt_recipients_to_file(
-                content, [new_master_public_key], secret_file
-            )
-
-            print(f"Re-encrypted: {secret_file}")
-        except RuntimeError as e:
-            print(f"Warning: Failed to re-encrypt {secret_file}: {e}")
+    re_encrypt_all_secrets(old_master_private_key, new_master_public_key)
 
     # Re-encrypt new master private key for all users
     print("Re-encrypting master private key for users...")
