@@ -560,11 +560,20 @@ def cmd_doctor():
 
     # Secret encryption status and permissions
     if USER_SECRET_FILE.exists():
-        results.append(("WARN", f"Unencrypted user secret present at {USER_SECRET_FILE}"))
+        results.append(
+            ("WARN", f"Unencrypted user secret present at {USER_SECRET_FILE}")
+        )
         if not check_unencrypted_user_secret_permissions():
-            results.append(("ERROR", f"Permissions for {USER_SECRET_FILE} are too open; run: chmod 600 {USER_SECRET_FILE}"))
+            results.append(
+                (
+                    "ERROR",
+                    f"Permissions for {USER_SECRET_FILE} are too open; run: chmod 600 {USER_SECRET_FILE}",
+                )
+            )
         else:
-            results.append(("OK", f"Permissions for {USER_SECRET_FILE} are 600 (owner-only)"))
+            results.append(
+                ("OK", f"Permissions for {USER_SECRET_FILE} are 600 (owner-only)")
+            )
     elif USER_SECRET_ENC_FILE.exists():
         results.append(("OK", f"User secret is encrypted ({USER_SECRET_ENC_FILE})"))
     else:
@@ -604,13 +613,21 @@ def cmd_doctor():
             except Exception as e:
                 results.append(("WARN", f"Failed to decrypt master key: {e}"))
         else:
-            results.append(("WARN", "Skipped master key decrypt check (no user key loaded)"))
+            results.append(
+                ("WARN", "Skipped master key decrypt check (no user key loaded)")
+            )
     else:
-        results.append(("WARN", f"Master key file not found at {MASTER_KEY_FILE} (not bootstrapped?)"))
+        results.append(
+            (
+                "WARN",
+                f"Master key file not found at {MASTER_KEY_FILE} (not bootstrapped?)",
+            )
+        )
 
     # Print results
     for level, msg in results:
         print(f"- {level}: {msg}")
+
 
 def cmd_migrate_encrypt_user_secret():
     """Encrypt plaintext user secret to user-secret.age.enc and delete plaintext."""
