@@ -232,6 +232,9 @@ def test_user_has_no_access(user_name, user_secret_path):
         if not verbose_check(f"{user_name} add operation fails", returncode != 0):
             return False, f"{user_name} can still add files after removal"
         
+        if not verbose_check(f"{user_name} add operation shows access denied", "Access denied" in stderr):
+            return False, f"{user_name} add operation failed but without 'Access denied' error: {stderr}"
+        
         # Test 2: List files should work but not show the file we tried to add
         returncode, stdout, stderr = run_age_store_command(
             ["ls"],
@@ -263,7 +266,28 @@ def test_user_has_no_access(user_name, user_secret_path):
                 )
                 if not verbose_check(f"{user_name} view operation fails", returncode != 0):
                     return False, f"{user_name} can still view files after removal"
+                
+                if not verbose_check(f"{user_name} view operation shows access denied", "Access denied" in stderr):
+                    return False, f"{user_name} view operation failed but without 'Access denied' error: {stderr}"
         
+        # Test 4: Admin operations should fail with access denied
+        admin_operations = [
+            (["admin", "add-user", "dummy", "age1abcdef"], "add user"),
+            (["admin", "remove-user", "dummy"], "remove user"),
+            (["admin", "rotate-master-key"], "rotate master key")
+        ]
+        
+        for admin_command, operation_name in admin_operations:
+            returncode, stdout, stderr = run_age_store_command(
+                admin_command,
+                description=f"try to {operation_name} using {user_name} credentials (should fail)",
+                user_secret_path=user_secret_path,
+            )
+            if not verbose_check(f"{user_name} {operation_name} operation fails", returncode != 0):
+                return False, f"{user_name} can still perform {operation_name} after removal"
+            
+            if not verbose_check(f"{user_name} {operation_name} operation shows access denied", "Access denied" in stderr):
+                return False, f"{user_name} {operation_name} operation failed but without 'Access denied' error: {stderr}"
         
         return True, None
     
