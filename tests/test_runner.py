@@ -135,9 +135,9 @@ def extract_public_key(output):
 def generate_random_content():
     """Generate random filename and content for testing."""
     # Generate random filename
-    filename = ''.join(random.choices(string.ascii_lowercase, k=8)) + "-test.txt"
+    filename = "".join(random.choices(string.ascii_lowercase, k=8)) + "-test.txt"
     # Generate random content
-    content = ''.join(random.choices(string.ascii_letters + string.digits + ' ', k=20))
+    content = "".join(random.choices(string.ascii_letters + string.digits + " ", k=20))
     return filename, content
 
 
@@ -148,10 +148,10 @@ def test_user_has_access(user_name, user_secret_path):
     """
     # Generate random test data
     test_filename, test_content = generate_random_content()
-    
+
     # Create test file
     test_file = create_test_file(test_filename, test_content)
-    
+
     try:
         # Test 1: Add file to store
         returncode, stdout, stderr = run_age_store_command(
@@ -161,12 +161,14 @@ def test_user_has_access(user_name, user_secret_path):
         )
         if not verbose_check(f"{user_name} can add files", returncode == 0):
             return False, f"{user_name} cannot add files: {stderr}"
-        
+
         # Check encrypted file exists
         encrypted_file = STORE_SUBDIR / f"{test_filename}.enc"
-        if not verbose_check(f"{user_name} encrypted file was created", encrypted_file.exists()):
+        if not verbose_check(
+            f"{user_name} encrypted file was created", encrypted_file.exists()
+        ):
             return False, f"{user_name} encrypted file not created"
-        
+
         # Test 2: List files and verify new file appears
         returncode, stdout, stderr = run_age_store_command(
             ["ls"],
@@ -175,10 +177,12 @@ def test_user_has_access(user_name, user_secret_path):
         )
         if not verbose_check(f"{user_name} can list files", returncode == 0):
             return False, f"{user_name} cannot list files: {stderr}"
-        
-        if not verbose_check(f"{user_name} sees added file in listing", test_filename in stdout):
+
+        if not verbose_check(
+            f"{user_name} sees added file in listing", test_filename in stdout
+        ):
             return False, f"{user_name} added file not found in listing: {stdout}"
-        
+
         # Test 3: View the file content
         returncode, stdout, stderr = run_age_store_command(
             ["view", test_filename],
@@ -187,10 +191,15 @@ def test_user_has_access(user_name, user_secret_path):
         )
         if not verbose_check(f"{user_name} can view files", returncode == 0):
             return False, f"{user_name} cannot view files: {stderr}"
-        
-        if not verbose_check(f"{user_name} file content matches", stdout.strip() == test_content):
-            return False, f"{user_name} file content mismatch. Expected: '{test_content}', Got: '{stdout.strip()}'"
-        
+
+        if not verbose_check(
+            f"{user_name} file content matches", stdout.strip() == test_content
+        ):
+            return (
+                False,
+                f"{user_name} file content mismatch. Expected: '{test_content}', Got: '{stdout.strip()}'",
+            )
+
         # Test 4: List users and verify user is included
         returncode, stdout, stderr = run_age_store_command(
             ["admin", "list-users"],
@@ -199,12 +208,12 @@ def test_user_has_access(user_name, user_secret_path):
         )
         if not verbose_check(f"{user_name} can list users", returncode == 0):
             return False, f"{user_name} cannot list users: {stderr}"
-        
+
         if not verbose_check(f"{user_name} appears in user list", user_name in stdout):
             return False, f"{user_name} not found in user list: {stdout}"
-        
+
         return True, None
-    
+
     finally:
         # Clean up test file
         if test_file.exists():
@@ -218,10 +227,10 @@ def test_user_has_no_access(user_name, user_secret_path):
     """
     # Generate random test data
     test_filename, test_content = generate_random_content()
-    
+
     # Create test file
     test_file = create_test_file(test_filename, test_content)
-    
+
     try:
         # Test 1: Add file should fail
         returncode, stdout, stderr = run_age_store_command(
@@ -231,10 +240,15 @@ def test_user_has_no_access(user_name, user_secret_path):
         )
         if not verbose_check(f"{user_name} add operation fails", returncode != 0):
             return False, f"{user_name} can still add files after removal"
-        
-        if not verbose_check(f"{user_name} add operation shows access denied", "Access denied" in stderr):
-            return False, f"{user_name} add operation failed but without 'Access denied' error: {stderr}"
-        
+
+        if not verbose_check(
+            f"{user_name} add operation shows access denied", "Access denied" in stderr
+        ):
+            return (
+                False,
+                f"{user_name} add operation failed but without 'Access denied' error: {stderr}",
+            )
+
         # Test 2: List files should work but not show the file we tried to add
         returncode, stdout, stderr = run_age_store_command(
             ["ls"],
@@ -243,11 +257,13 @@ def test_user_has_no_access(user_name, user_secret_path):
         )
         if not verbose_check(f"{user_name} can list files", returncode == 0):
             return False, f"{user_name} cannot list files: {stderr}"
-        
+
         # Verify the file we tried to add doesn't appear in the listing
-        if not verbose_check(f"{user_name} added file not in listing", test_filename not in stdout):
+        if not verbose_check(
+            f"{user_name} added file not in listing", test_filename not in stdout
+        ):
             return False, f"{user_name} unauthorized file appears in listing: {stdout}"
-        
+
         # Test 3: View files should fail (try to view any existing file)
         # Get a list of files from user1 to find an existing file to test with
         returncode, user1_listing, stderr = run_age_store_command(
@@ -256,7 +272,9 @@ def test_user_has_no_access(user_name, user_secret_path):
             user_secret_path=USER1_SECRET,
         )
         if returncode == 0 and user1_listing.strip():
-            existing_files = [f.strip() for f in user1_listing.strip().split('\n') if f.strip()]
+            existing_files = [
+                f.strip() for f in user1_listing.strip().split("\n") if f.strip()
+            ]
             if existing_files:
                 test_file_to_view = existing_files[0]
                 returncode, stdout, stderr = run_age_store_command(
@@ -264,33 +282,52 @@ def test_user_has_no_access(user_name, user_secret_path):
                     description=f"try to view {test_file_to_view} using {user_name} credentials (should fail)",
                     user_secret_path=user_secret_path,
                 )
-                if not verbose_check(f"{user_name} view operation fails", returncode != 0):
+                if not verbose_check(
+                    f"{user_name} view operation fails", returncode != 0
+                ):
                     return False, f"{user_name} can still view files after removal"
-                
-                if not verbose_check(f"{user_name} view operation shows access denied", "Access denied" in stderr):
-                    return False, f"{user_name} view operation failed but without 'Access denied' error: {stderr}"
-        
+
+                if not verbose_check(
+                    f"{user_name} view operation shows access denied",
+                    "Access denied" in stderr,
+                ):
+                    return (
+                        False,
+                        f"{user_name} view operation failed but without 'Access denied' error: {stderr}",
+                    )
+
         # Test 4: Admin operations should fail with access denied
         admin_operations = [
             (["admin", "add-user", "dummy", "age1abcdef"], "add user"),
             (["admin", "remove-user", "dummy"], "remove user"),
-            (["admin", "rotate-master-key"], "rotate master key")
+            (["admin", "rotate-master-key"], "rotate master key"),
         ]
-        
+
         for admin_command, operation_name in admin_operations:
             returncode, stdout, stderr = run_age_store_command(
                 admin_command,
                 description=f"try to {operation_name} using {user_name} credentials (should fail)",
                 user_secret_path=user_secret_path,
             )
-            if not verbose_check(f"{user_name} {operation_name} operation fails", returncode != 0):
-                return False, f"{user_name} can still perform {operation_name} after removal"
-            
-            if not verbose_check(f"{user_name} {operation_name} operation shows access denied", "Access denied" in stderr):
-                return False, f"{user_name} {operation_name} operation failed but without 'Access denied' error: {stderr}"
-        
+            if not verbose_check(
+                f"{user_name} {operation_name} operation fails", returncode != 0
+            ):
+                return (
+                    False,
+                    f"{user_name} can still perform {operation_name} after removal",
+                )
+
+            if not verbose_check(
+                f"{user_name} {operation_name} operation shows access denied",
+                "Access denied" in stderr,
+            ):
+                return (
+                    False,
+                    f"{user_name} {operation_name} operation failed but without 'Access denied' error: {stderr}",
+                )
+
         return True, None
-    
+
     finally:
         # Clean up test file
         if test_file.exists():
@@ -347,8 +384,13 @@ def test_init_and_bootstrap():
         return False, f"show-pubkey user1 failed: {stderr}"
 
     user1_pubkey = extract_public_key(user1_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", user1_pubkey is not None):
-        return False, f"No valid public key found in user1 output: {user1_pubkey_stdout}"
+    if not verbose_check(
+        "output contains valid age1 public key", user1_pubkey is not None
+    ):
+        return (
+            False,
+            f"No valid public key found in user1 output: {user1_pubkey_stdout}",
+        )
 
     returncode, user2_pubkey_stdout, stderr = run_age_store_command(
         ["show-pubkey"],
@@ -359,11 +401,18 @@ def test_init_and_bootstrap():
         return False, f"show-pubkey user2 failed: {stderr}"
 
     user2_pubkey = extract_public_key(user2_pubkey_stdout)
-    if not verbose_check("output contains valid age1 public key", user2_pubkey is not None):
-        return False, f"No valid public key found in user2 output: {user2_pubkey_stdout}"
+    if not verbose_check(
+        "output contains valid age1 public key", user2_pubkey is not None
+    ):
+        return (
+            False,
+            f"No valid public key found in user2 output: {user2_pubkey_stdout}",
+        )
 
     # Verify user1 and user2 have different public keys
-    if not verbose_check("user1 and user2 have different public keys", user1_pubkey != user2_pubkey):
+    if not verbose_check(
+        "user1 and user2 have different public keys", user1_pubkey != user2_pubkey
+    ):
         return False, f"user1 and user2 have identical public keys: {user1_pubkey}"
 
     # Use user1 public key for bootstrap
@@ -389,8 +438,6 @@ def test_init_and_bootstrap():
         return False, "master-key.age.enc not created"
 
     return True, None
-
-
 
 
 def test_user1_access():
@@ -479,10 +526,10 @@ def test_master_key_rotation():
     # Add two random files before rotation
     test_file1_name, test_file1_content = generate_random_content()
     test_file2_name, test_file2_content = generate_random_content()
-    
+
     test_file1 = create_test_file(test_file1_name, test_file1_content)
     test_file2 = create_test_file(test_file2_name, test_file2_content)
-    
+
     # Add first file using user1
     returncode, stdout, stderr = run_age_store_command(
         ["add", test_file1.name],
@@ -491,7 +538,7 @@ def test_master_key_rotation():
     )
     if not verbose_check("file1 added successfully", returncode == 0):
         return False, f"Failed to add file1 before rotation: {stderr}"
-    
+
     # Add second file using user2
     returncode, stdout, stderr = run_age_store_command(
         ["add", test_file2.name],
@@ -500,11 +547,11 @@ def test_master_key_rotation():
     )
     if not verbose_check("file2 added successfully", returncode == 0):
         return False, f"Failed to add file2 before rotation: {stderr}"
-    
+
     # Clean up original test files
     test_file1.unlink()
     test_file2.unlink()
-    
+
     # Get file listing before rotation
     returncode, listing_before, stderr = run_age_store_command(
         ["ls"],
@@ -513,7 +560,7 @@ def test_master_key_rotation():
     )
     if not verbose_check("listing before rotation succeeded", returncode == 0):
         return False, f"Failed to get listing before rotation: {stderr}"
-    
+
     # Get original encrypted file contents
     encrypted_files = {}
     for filename in [test_file1_name, test_file2_name]:
@@ -536,9 +583,12 @@ def test_master_key_rotation():
         encrypted_file = STORE_SUBDIR / f"{filename}.enc"
         with open(encrypted_file, "rb") as f:
             new_content = f.read()
-        
+
         if original_content == new_content:
-            return False, f"Encrypted file {filename} content didn't change after key rotation"
+            return (
+                False,
+                f"Encrypted file {filename} content didn't change after key rotation",
+            )
 
     # Get file listing after rotation
     returncode, listing_after, stderr = run_age_store_command(
@@ -548,29 +598,43 @@ def test_master_key_rotation():
     )
     if not verbose_check("listing after rotation succeeded", returncode == 0):
         return False, f"Failed to get listing after rotation: {stderr}"
-    
+
     # Verify file listing is the same before and after rotation
-    if not verbose_check("file listing unchanged after rotation", set(listing_before.strip().split('\n')) == set(listing_after.strip().split('\n'))):
-        return False, f"File listing changed after rotation.\nBefore: {listing_before}\nAfter: {listing_after}"
+    if not verbose_check(
+        "file listing unchanged after rotation",
+        set(listing_before.strip().split("\n"))
+        == set(listing_after.strip().split("\n")),
+    ):
+        return (
+            False,
+            f"File listing changed after rotation.\nBefore: {listing_before}\nAfter: {listing_after}",
+        )
 
     # Test that both user1 and user2 can still access both files after rotation
     test_cases = [
         (test_file1_name, test_file1_content),
-        (test_file2_name, test_file2_content)
+        (test_file2_name, test_file2_content),
     ]
-    
+
     for filename, expected_content in test_cases:
-        for user_name, user_secret in [("user1", USER1_SECRET), ("user2", USER2_SECRET)]:
+        for user_name, user_secret in [
+            ("user1", USER1_SECRET),
+            ("user2", USER2_SECRET),
+        ]:
             returncode, stdout, stderr = run_age_store_command(
                 ["view", filename],
                 description=f"verify {user_name} can access {filename} after rotation",
                 user_secret_path=user_secret,
             )
             if not verbose_check(f"{user_name} can access {filename}", returncode == 0):
-                return False, f"{user_name} cannot access {filename} after rotation: {stderr}"
+                return (
+                    False,
+                    f"{user_name} cannot access {filename} after rotation: {stderr}",
+                )
 
             if not verbose_check(
-                f"{user_name} {filename} content matches", stdout.strip() == expected_content
+                f"{user_name} {filename} content matches",
+                stdout.strip() == expected_content,
             ):
                 return (
                     False,
@@ -740,7 +804,6 @@ def main():
         passed += 1
     elif result is None:
         total -= 1  # Don't count skipped tests
-
 
     # User functionality tests
     tests = [
