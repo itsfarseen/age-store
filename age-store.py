@@ -22,17 +22,17 @@ DEFAULT_USER_SECRET_ENC_FILE = Path("user-secret.age.enc")
 MASTER_KEY_FILE = Path("master-key.age.enc")
 
 # Global variable for user secret file path (set by set_user_secret_file)
-USER_SECRET_FILE = None
+USER_SECRET_FILE: Path = None  # type: ignore
 
 
 def set_user_secret_file(user_secret_path: str | None = None):
     """Set the global USER_SECRET_FILE based on command line arg or default logic.
-    
+
     Args:
         user_secret_path: Optional path to user secret file from command line
     """
     global USER_SECRET_FILE
-    
+
     if user_secret_path:
         # Use the provided path
         USER_SECRET_FILE = Path(user_secret_path)
@@ -195,7 +195,7 @@ def read_user_secret() -> str:
         print("Run 'age-store.py init-user' to create a user secret.")
         sys.exit(1)
 
-    if USER_SECRET_FILE.suffix == '.enc' or USER_SECRET_FILE.name.endswith('.age.enc'):
+    if USER_SECRET_FILE.suffix == ".enc" or USER_SECRET_FILE.name.endswith(".age.enc"):
         # Encrypted file - decrypt using age, allowing it to prompt for passphrase via stdin/tty.
         try:
             return age_decrypt_file_with_passphrase(USER_SECRET_FILE)
@@ -206,7 +206,7 @@ def read_user_secret() -> str:
         # Plain file - warn if using unencrypted secret file
         print(
             f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (.enc suffix).",
-            file=sys.stderr
+            file=sys.stderr,
         )
 
         # Check permissions
@@ -477,32 +477,43 @@ def cmd_init_user(unencrypted: bool):
     - Otherwise, encrypt the private key with a passphrase and save to the specified path or user-secret.age.enc.
     """
     # Determine output files based on global USER_SECRET_FILE or defaults
-    if USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE:
+    if (
+        USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE
+        and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE
+    ):
         # Custom path specified via --user-secret
         target_file = USER_SECRET_FILE
-        
+
         # Validate extension matches the chosen mode
-        is_encrypted_extension = target_file.suffix == '.enc' or target_file.name.endswith('.age.enc')
+        is_encrypted_extension = (
+            target_file.suffix == ".enc" or target_file.name.endswith(".age.enc")
+        )
         if unencrypted and is_encrypted_extension:
-            print(f"Error: --unencrypted specified but target file {target_file} has encrypted extension (.enc)")
+            print(
+                f"Error: --unencrypted specified but target file {target_file} has encrypted extension (.enc)"
+            )
             print("Use a plain file extension or remove --unencrypted flag")
             sys.exit(1)
         elif not unencrypted and not is_encrypted_extension:
-            print(f"Error: encrypted mode selected but target file {target_file} does not have encrypted extension (.enc)")
+            print(
+                f"Error: encrypted mode selected but target file {target_file} does not have encrypted extension (.enc)"
+            )
             print("Use an .enc extension or add --unencrypted flag")
             sys.exit(1)
     else:
         # Use default paths
-        target_file = DEFAULT_USER_SECRET_FILE if unencrypted else DEFAULT_USER_SECRET_ENC_FILE
+        target_file = (
+            DEFAULT_USER_SECRET_FILE if unencrypted else DEFAULT_USER_SECRET_ENC_FILE
+        )
 
     # For encrypted mode, derive temp file by removing .enc extension
     if not unencrypted:
-        if target_file.name.endswith('.age.enc'):
+        if target_file.name.endswith(".age.enc"):
             temp_file = target_file.with_name(target_file.name[:-4])  # Remove .enc
-        elif target_file.suffix == '.enc':
-            temp_file = target_file.with_suffix('')  # Remove .enc suffix
+        elif target_file.suffix == ".enc":
+            temp_file = target_file.with_suffix("")  # Remove .enc suffix
         else:
-            temp_file = target_file.with_suffix('.age')  # Add .age extension
+            temp_file = target_file.with_suffix(".age")  # Add .age extension
     else:
         temp_file = None
 
@@ -547,7 +558,9 @@ def cmd_init_user(unencrypted: bool):
         print("User initialization complete (encrypted)")
         print(f"Age public key: {user_public_key}")
         print(f"Encrypted private key saved to: {target_file}")
-        print(f"Note: Plaintext private key also present at {temp_file} (permissions 600).")
+        print(
+            f"Note: Plaintext private key also present at {temp_file} (permissions 600)."
+        )
     except FileNotFoundError as e:
         print(f"Error: Required command not found: {e}")
         sys.exit(1)
@@ -623,10 +636,15 @@ def cmd_doctor():
             )
         else:
             results.append(
-                ("OK", f"Permissions for {DEFAULT_USER_SECRET_FILE} are 600 (owner-only)")
+                (
+                    "OK",
+                    f"Permissions for {DEFAULT_USER_SECRET_FILE} are 600 (owner-only)",
+                )
             )
     elif DEFAULT_USER_SECRET_ENC_FILE.exists():
-        results.append(("OK", f"User secret is encrypted ({DEFAULT_USER_SECRET_ENC_FILE})"))
+        results.append(
+            ("OK", f"User secret is encrypted ({DEFAULT_USER_SECRET_ENC_FILE})")
+        )
     else:
         results.append(("WARN", "No user secret found (run 'init-user')"))
 
@@ -637,7 +655,9 @@ def cmd_doctor():
             with open(DEFAULT_USER_SECRET_FILE, "r") as f:
                 user_private_key = f.read().strip()
         elif DEFAULT_USER_SECRET_ENC_FILE.exists():
-            user_private_key = age_decrypt_file_with_passphrase(DEFAULT_USER_SECRET_ENC_FILE)
+            user_private_key = age_decrypt_file_with_passphrase(
+                DEFAULT_USER_SECRET_ENC_FILE
+            )
     except Exception as e:
         results.append(("WARN", f"Failed to load user private key: {e}"))
 
@@ -683,19 +703,22 @@ def cmd_doctor():
 def cmd_migrate_encrypt_user_secret():
     """Encrypt plaintext user secret to encrypted version and delete plaintext."""
     # Determine source file from --user-secret argument or default
-    if USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE:
+    if (
+        USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE
+        and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE
+    ):
         # Custom path specified via --user-secret (treated as source)
         source_file = USER_SECRET_FILE
-        
-        if source_file.suffix == '.enc' or source_file.name.endswith('.age.enc'):
+
+        if source_file.suffix == ".enc" or source_file.name.endswith(".age.enc"):
             print(f"Error: Source file {source_file} is already encrypted")
             sys.exit(1)
-        
+
         # Derive encrypted target by adding .enc extension
-        if source_file.suffix == '.age':
-            target_file = source_file.with_suffix('.age.enc')
+        if source_file.suffix == ".age":
+            target_file = source_file.with_suffix(".age.enc")
         else:
-            target_file = source_file.with_suffix(source_file.suffix + '.enc')
+            target_file = source_file.with_suffix(source_file.suffix + ".enc")
     else:
         # Use default files
         source_file = DEFAULT_USER_SECRET_FILE
@@ -705,7 +728,7 @@ def cmd_migrate_encrypt_user_secret():
     if not source_file.exists():
         print(f"Error: Plaintext secret {source_file} not found.")
         sys.exit(1)
-    
+
     if target_file.exists():
         print(f"Error: Encrypted file {target_file} already exists")
         sys.exit(1)
@@ -749,7 +772,7 @@ def main():
     parser.add_argument(
         "--user-secret",
         help="Path to user secret file (encrypted .enc or plain file)",
-        metavar="PATH"
+        metavar="PATH",
     )
 
     subparsers = parser.add_subparsers(
