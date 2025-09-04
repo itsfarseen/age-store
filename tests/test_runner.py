@@ -96,7 +96,7 @@ def run_age_store_command(
             print_with_left_border(
                 result.stderr.rstrip(), border_color=T.yellow, text_color=T.grey
             )
-        
+
         # Print output if verbose mode is enabled
         if verbose and result.stdout.strip():
             print_with_left_border(
@@ -130,7 +130,7 @@ def create_test_file(filename, content):
 def extract_public_key(output):
     """Extract age public key from command output."""
     # Remove only one trailing newline, preserve exact format
-    cleaned = output.rstrip('\n')
+    cleaned = output.rstrip("\n")
     return cleaned if cleaned.startswith("age1") else None
 
 
@@ -274,9 +274,7 @@ def test_user_has_no_access(user_name, user_secret_path):
             user_secret_path=USER1_SECRET,
         )
         if returncode == 0 and user1_listing:
-            existing_files = [
-                f for f in user1_listing.split("\n") if f
-            ]
+            existing_files = [f for f in user1_listing.split("\n") if f]
             if existing_files:
                 test_file_to_view = existing_files[0]
                 returncode, stdout, stderr = run_age_store_command(
@@ -604,8 +602,7 @@ def test_master_key_rotation():
     # Verify file listing is the same before and after rotation
     if not verbose_check(
         "file listing unchanged after rotation",
-        set(listing_before.split("\n"))
-        == set(listing_after.split("\n")),
+        set(listing_before.split("\n")) == set(listing_after.split("\n")),
     ):
         return (
             False,

@@ -24,6 +24,7 @@ MASTER_KEY_FILE = Path("master-key.age.enc")
 # Global variable for user secret file path (set by set_user_secret_file)
 USER_SECRET_FILE: Path = None  # type: ignore
 
+
 # Error print alias for stderr output
 def eprint(*args, **kwargs):
     print(*args, **kwargs, file=sys.stderr)
@@ -411,7 +412,7 @@ def cmd_remove_user(username: str):
     """Remove a user's access to secrets."""
     # Get old master private key (this verifies the calling user has access)
     old_master_private_key = get_master_private_key()
-    
+
     # Check if user exists in users.json
     users_config = load_users_config()
 
