@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2 (2025-09-02)
+## 0.2 (2025-09-04)
 
 **Encrypted user secrets**
 - `init-user` now generates a passphrase-encrypted keypair (saved as `user-secret.age.enc`).
@@ -14,7 +14,9 @@
 - Add `doctor` command to run health checks.
 - Support encrypting and decrypting binary files.
 - Add `version` command.
+- Add `--user-secret` option to specify custom user secret file paths.
 - Command renames: `list-files` → `ls`, `view-file` → `view`, `add-file` → `add`.
+- Add access verification to `ls` command to ensure users can only see files they have permission to access.
 
 ## 0.1 (Initial Release)
 
