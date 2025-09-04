@@ -334,7 +334,7 @@ def cmd_bootstrap(initial_user: str):
     print(f"Bootstrap complete. Master keypair created for user: {initial_user}")
 
 
-def cmd_add_file(file_path_str: str):
+def cmd_add_file(file_path_str: str, force: bool = False):
     """Add a file to the secret store."""
     file_path = Path(file_path_str)
 
@@ -356,28 +356,11 @@ def cmd_add_file(file_path_str: str):
     secret_file = STORE_DIR / f"{file_path.name}.enc"
 
     # Check if encrypted file already exists
-    while secret_file.exists():
-        response = (
-            input(
-                f"File {secret_file} already exists in store. Overwrite, rename, or skip? [y/N/r]: "
-            )
-            .strip()
-            .lower()
-        )
-        if response == "y":
-            break  # Proceed to overwrite
-        elif response == "r":
-            new_name = input(f"Enter new filename (without .enc): ").strip()
-            if not new_name:
-                eprint("Error: No filename provided, skipping")
-                return
-            secret_file = STORE_DIR / f"{new_name}.enc"
-            if secret_file.exists():
-                eprint(f"Error: File {secret_file} already exists, try again")
-                continue
-        else:  # Default to 'n' or any other input
-            print(f"Skipping {file_path}: not overwritten")
-            return
+    if secret_file.exists():
+        if not force:
+            eprint(f"Error: File {secret_file.name} already exists in store")
+            eprint("Use --force to overwrite existing files")
+            sys.exit(1)
 
     # Encrypt file with master public key directly to secret_file
     age_encrypt_recipients_to_file(content, [master_public_key], secret_file)
@@ -843,6 +826,9 @@ def main():
         "add", help="Add a file to the secret store"
     )
     add_file_parser.add_argument("file", help="Path to the file to add")
+    add_file_parser.add_argument(
+        "--force", action="store_true", help="Overwrite existing files"
+    )
 
     # Admin commands subparser
     admin_parser = subparsers.add_parser("admin", help="Administrative commands")
@@ -926,7 +912,7 @@ def main():
             elif args.admin_command == "list-users":
                 cmd_list_users()
         elif args.command == "add":
-            cmd_add_file(args.file)
+            cmd_add_file(args.file, args.force)
         elif args.command == "view":
             cmd_view_file(args.file)
         elif args.command == "ls":

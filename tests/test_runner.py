@@ -202,7 +202,62 @@ def test_user_has_access(user_name, user_secret_path):
                 f"{user_name} file content mismatch. Expected: '{test_content}', Got: '{stdout}'",
             )
 
-        # Test 4: List users and verify user is included
+        # Test 4: Test --force functionality using the same file
+        # Try to add the same file again without --force (should fail)
+        returncode, stdout, stderr = run_age_store_command(
+            ["add", test_file.name],
+            description=f"try to add {test_filename} again without --force (should fail)",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(
+            f"{user_name} add without --force fails for existing file", returncode != 0
+        ):
+            return False, f"{user_name} can overwrite existing file without --force"
+
+        if not verbose_check(
+            f"{user_name} add without --force suggests using --force",
+            "Use --force to overwrite existing files" in stderr,
+        ):
+            return False, f"{user_name} error message doesn't suggest --force: {stderr}"
+
+        # Modify the file content before re-adding with --force
+        modified_content = test_content + " MODIFIED"
+        with open(test_file, "w") as f:
+            f.write(modified_content)
+
+        # Now add same file again with --force (should succeed)
+        returncode, stdout, stderr = run_age_store_command(
+            ["add", "--force", test_file.name],
+            description=f"add {test_filename} again with --force (should succeed)",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(
+            f"{user_name} add with --force succeeds for existing file", returncode == 0
+        ):
+            return (
+                False,
+                f"{user_name} cannot overwrite existing file with --force: {stderr}",
+            )
+
+        # Verify the file content was actually overwritten by viewing it
+        returncode, view_stdout, stderr = run_age_store_command(
+            ["view", test_filename],
+            description=f"verify {test_filename} content was overwritten",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(f"{user_name} can view overwritten file", returncode == 0):
+            return False, f"{user_name} cannot view overwritten file: {stderr}"
+
+        if not verbose_check(
+            f"{user_name} overwritten file content matches modified content",
+            view_stdout == modified_content,
+        ):
+            return (
+                False,
+                f"{user_name} file was not properly overwritten. Expected: '{modified_content}', Got: '{view_stdout}'",
+            )
+
+        # Test 5: List users and verify user is included
         returncode, stdout, stderr = run_age_store_command(
             ["admin", "list-users"],
             description=f"list users using {user_name} credentials",
@@ -238,7 +293,7 @@ def test_user_has_no_access(
     test_file = create_test_file(test_filename, test_content)
 
     try:
-        # Test 1: Add file should fail
+        # Test 1: Add file should fail (without --force)
         returncode, stdout, stderr = run_age_store_command(
             ["add", test_file.name],
             description=f"try to add {test_filename} using {user_name} credentials (should fail)",
@@ -253,6 +308,26 @@ def test_user_has_no_access(
             return (
                 False,
                 f"{user_name} add operation failed but without 'Access denied' error: {stderr}",
+            )
+
+        # Test 1b: Add file should also fail with --force
+        returncode, stdout, stderr = run_age_store_command(
+            ["add", "--force", test_file.name],
+            description=f"try to add {test_filename} with --force using {user_name} credentials (should still fail)",
+            user_secret_path=user_secret_path,
+        )
+        if not verbose_check(
+            f"{user_name} add operation with --force fails", returncode != 0
+        ):
+            return False, f"{user_name} can still add files with --force after removal"
+
+        if not verbose_check(
+            f"{user_name} add operation with --force shows access denied",
+            "Access denied" in stderr,
+        ):
+            return (
+                False,
+                f"{user_name} add operation with --force failed but without 'Access denied' error: {stderr}",
             )
 
         # Verify with valid user that file was not actually added
@@ -320,6 +395,58 @@ def test_user_has_no_access(
                 return (
                     False,
                     f"{user_name} view operation failed but without 'Access denied' error: {stderr}",
+                )
+
+            # Test 3b: Try to overwrite the existing view test file with --force (should also fail)
+            # Modify the view test file content locally
+            modified_overwrite_content = view_test_content + " MODIFIED"
+            with open(view_test_file, "w") as f:
+                f.write(modified_overwrite_content)
+
+            # Try to overwrite existing file with --force using unauthorized user (should fail)
+            returncode, stdout, stderr = run_age_store_command(
+                ["add", "--force", view_test_file.name],
+                description=f"try to overwrite {view_test_filename} with --force using {user_name} credentials (should fail)",
+                user_secret_path=user_secret_path,
+            )
+            if not verbose_check(
+                f"{user_name} overwrite with --force fails", returncode != 0
+            ):
+                return (
+                    False,
+                    f"{user_name} can overwrite existing files with --force after removal",
+                )
+
+            if not verbose_check(
+                f"{user_name} overwrite with --force shows access denied",
+                "Access denied" in stderr,
+            ):
+                return (
+                    False,
+                    f"{user_name} overwrite with --force failed but without 'Access denied' error: {stderr}",
+                )
+
+            # Verify with valid user that file content in store was not changed
+            returncode, store_view_stdout, stderr = run_age_store_command(
+                ["view", view_test_filename],
+                description=f"verify {view_test_filename} content in store unchanged using {valid_user_name} credentials",
+                user_secret_path=valid_user_secret_path,
+            )
+            if not verbose_check(
+                "valid user can view file after failed overwrite", returncode == 0
+            ):
+                return (
+                    False,
+                    f"{valid_user_name} cannot view file after failed overwrite: {stderr}",
+                )
+
+            if not verbose_check(
+                "file content in store unchanged after failed overwrite",
+                store_view_stdout == view_test_content,
+            ):
+                return (
+                    False,
+                    f"File {view_test_filename} in store was incorrectly modified. Expected: '{view_test_content}', Got: '{store_view_stdout}'",
                 )
 
         finally:
@@ -739,69 +866,51 @@ def test_user_removal():
             f"User2 pubkey changed after removal: {original_pubkey} -> {current_pubkey}",
         )
 
-    # Add a test file using valid user (user1) for remove-user testing
-    test_remove_filename, test_remove_content = generate_random_content()
-    test_remove_file = create_test_file(test_remove_filename, test_remove_content)
+    # Test that user2 has lost access using the no access test function
+    success, error_message = test_user_has_no_access(
+        "user2", USER2_SECRET, "user1", USER1_SECRET
+    )
+    if not success:
+        return False, error_message
 
-    try:
+    # Test remove-user operation (try to remove user1 which should fail since user2 has no access)
+    admin_operations = [
+        (["admin", "remove-user", "user1"], "remove user"),
+    ]
+
+    for admin_command, operation_name in admin_operations:
         returncode, stdout, stderr = run_age_store_command(
-            ["add", test_remove_file.name],
-            description=f"add {test_remove_filename} for remove-user test using user1 credentials",
-            user_secret_path=USER1_SECRET,
+            admin_command,
+            description=f"try to {operation_name} using user2 credentials (should fail)",
+            user_secret_path=USER2_SECRET,
         )
-        if not verbose_check("test file added for remove-user test", returncode == 0):
-            return False, f"Failed to add test file for remove-user test: {stderr}"
-
-        # Test that user2 has lost access using the no access test function
-        success, error_message = test_user_has_no_access(
-            "user2", USER2_SECRET, "user1", USER1_SECRET
-        )
-        if not success:
-            return False, error_message
-
-        # Test remove-user operation (try to remove user1 which should fail since user2 has no access)
-        admin_operations = [
-            (["admin", "remove-user", "user1"], "remove user"),
-        ]
-
-        for admin_command, operation_name in admin_operations:
-            returncode, stdout, stderr = run_age_store_command(
-                admin_command,
-                description=f"try to {operation_name} using user2 credentials (should fail)",
-                user_secret_path=USER2_SECRET,
-            )
-            if not verbose_check(
-                f"user2 {operation_name} operation fails", returncode != 0
-            ):
-                return False, f"user2 can still perform {operation_name} after removal"
-
-            if not verbose_check(
-                f"user2 {operation_name} operation shows access denied",
-                "Access denied" in stderr,
-            ):
-                return (
-                    False,
-                    f"user2 {operation_name} operation failed but without 'Access denied' error: {stderr}",
-                )
-
-        # Verify with valid user that user1 still exists in the user list (wasn't removed)
-        returncode, users_stdout, stderr = run_age_store_command(
-            ["admin", "list-users"],
-            description=f"verify user1 still exists using user1 credentials",
-            user_secret_path=USER1_SECRET,
-        )
-        if not verbose_check("valid user can list users", returncode == 0):
-            return False, f"user1 cannot list users: {stderr}"
+        if not verbose_check(
+            f"user2 {operation_name} operation fails", returncode != 0
+        ):
+            return False, f"user2 can still perform {operation_name} after removal"
 
         if not verbose_check(
-            "user1 still exists after failed remove", "user1" in users_stdout
+            f"user2 {operation_name} operation shows access denied",
+            "Access denied" in stderr,
         ):
-            return False, f"User1 was incorrectly removed from users: {users_stdout}"
+            return (
+                False,
+                f"user2 {operation_name} operation failed but without 'Access denied' error: {stderr}",
+            )
 
-    finally:
-        # Clean up test file
-        if test_remove_file.exists():
-            test_remove_file.unlink()
+    # Verify with valid user that user1 still exists in the user list (wasn't removed)
+    returncode, users_stdout, stderr = run_age_store_command(
+        ["admin", "list-users"],
+        description=f"verify user1 still exists using user1 credentials",
+        user_secret_path=USER1_SECRET,
+    )
+    if not verbose_check("valid user can list users", returncode == 0):
+        return False, f"user1 cannot list users: {stderr}"
+
+    if not verbose_check(
+        "user1 still exists after failed remove", "user1" in users_stdout
+    ):
+        return False, f"User1 was incorrectly removed from users: {users_stdout}"
 
     return True, None
 

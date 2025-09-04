@@ -17,6 +17,7 @@
 - Add `--user-secret` option to specify custom user secret file paths.
 - Command renames: `list-files` → `ls`, `view-file` → `view`, `add-file` → `add`.
 - Add access verification to `ls` command to ensure users can only see files they have permission to access.
+- Make `add` non-interactive on conflict: it now fails if the target file already exists and suggests using `--force`; add `--force` flag to allow overwrite.
 
 ## 0.1 (Initial Release)
 
