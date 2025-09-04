@@ -599,6 +599,9 @@ def cmd_list_users():
 
 def cmd_list_store():
     """List all available secrets."""
+    # Verify user has access before listing files
+    get_master_private_key()
+
     secrets = []
     for secret_file in STORE_DIR.glob("*.enc"):
         secrets.append(secret_file.stem)

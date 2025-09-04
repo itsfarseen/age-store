@@ -222,9 +222,13 @@ def test_user_has_access(user_name, user_secret_path):
             test_file.unlink()
 
 
-def test_user_has_no_access(user_name, user_secret_path):
+def test_user_has_no_access(
+    user_name, user_secret_path, valid_user_name, valid_user_secret_path
+):
     """
     Test that a user has no access to the store (all operations should fail).
+    Uses a valid user to verify that operations didn't actually succeed.
+    Creates a test file with valid user credentials for view testing.
     Returns (success, error_message) tuple.
     """
     # Generate random test data
@@ -251,55 +255,81 @@ def test_user_has_no_access(user_name, user_secret_path):
                 f"{user_name} add operation failed but without 'Access denied' error: {stderr}",
             )
 
-        # Test 2: List files should work but not show the file we tried to add
+        # Verify with valid user that file was not actually added
+        returncode, valid_stdout, stderr = run_age_store_command(
+            ["ls"],
+            description=f"verify {test_filename} not added using {valid_user_name} credentials",
+            user_secret_path=valid_user_secret_path,
+        )
+        if not verbose_check(f"valid user can list files", returncode == 0):
+            return False, f"{valid_user_name} cannot list files: {stderr}"
+
+        if not verbose_check(
+            f"unauthorized file not in store", test_filename not in valid_stdout
+        ):
+            return (
+                False,
+                f"File {test_filename} was incorrectly added to store: {valid_stdout}",
+            )
+
+        # Test 2: List files should fail with access denied
         returncode, stdout, stderr = run_age_store_command(
             ["ls"],
-            description=f"list files using {user_name} credentials",
+            description=f"list files using {user_name} credentials (should fail)",
             user_secret_path=user_secret_path,
         )
-        if not verbose_check(f"{user_name} can list files", returncode == 0):
-            return False, f"{user_name} cannot list files: {stderr}"
+        if not verbose_check(f"{user_name} list operation fails", returncode != 0):
+            return False, f"{user_name} can still list files after removal"
 
-        # Verify the file we tried to add doesn't appear in the listing
         if not verbose_check(
-            f"{user_name} added file not in listing", test_filename not in stdout
+            f"{user_name} list operation shows access denied", "Access denied" in stderr
         ):
-            return False, f"{user_name} unauthorized file appears in listing: {stdout}"
+            return (
+                False,
+                f"{user_name} list operation failed but without 'Access denied' error: {stderr}",
+            )
 
-        # Test 3: View files should fail (try to view any existing file)
-        # Get a list of files from user1 to find an existing file to test with
-        returncode, user1_listing, stderr = run_age_store_command(
-            ["ls"],
-            description="get existing files for view test",
-            user_secret_path=USER1_SECRET,
-        )
-        if returncode == 0 and user1_listing:
-            existing_files = [f for f in user1_listing.split("\n") if f]
-            if existing_files:
-                test_file_to_view = existing_files[0]
-                returncode, stdout, stderr = run_age_store_command(
-                    ["view", test_file_to_view],
-                    description=f"try to view {test_file_to_view} using {user_name} credentials (should fail)",
-                    user_secret_path=user_secret_path,
+        # Test 3: View files should fail
+        # Create a test file with valid user credentials for view testing
+        view_test_filename, view_test_content = generate_random_content()
+        view_test_file = create_test_file(view_test_filename, view_test_content)
+
+        try:
+            # Add test file using valid user credentials
+            returncode, stdout, stderr = run_age_store_command(
+                ["add", view_test_file.name],
+                description=f"add {view_test_filename} for view test using {valid_user_name} credentials",
+                user_secret_path=valid_user_secret_path,
+            )
+            if not verbose_check("view test file added", returncode == 0):
+                return False, f"Failed to add view test file: {stderr}"
+
+            # Test view operation with the newly created file
+            returncode, stdout, stderr = run_age_store_command(
+                ["view", view_test_filename],
+                description=f"try to view {view_test_filename} using {user_name} credentials (should fail)",
+                user_secret_path=user_secret_path,
+            )
+            if not verbose_check(f"{user_name} view operation fails", returncode != 0):
+                return False, f"{user_name} can still view files after removal"
+
+            if not verbose_check(
+                f"{user_name} view operation shows access denied",
+                "Access denied" in stderr,
+            ):
+                return (
+                    False,
+                    f"{user_name} view operation failed but without 'Access denied' error: {stderr}",
                 )
-                if not verbose_check(
-                    f"{user_name} view operation fails", returncode != 0
-                ):
-                    return False, f"{user_name} can still view files after removal"
 
-                if not verbose_check(
-                    f"{user_name} view operation shows access denied",
-                    "Access denied" in stderr,
-                ):
-                    return (
-                        False,
-                        f"{user_name} view operation failed but without 'Access denied' error: {stderr}",
-                    )
+        finally:
+            # Clean up view test file
+            if view_test_file.exists():
+                view_test_file.unlink()
 
         # Test 4: Admin operations should fail with access denied
         admin_operations = [
             (["admin", "add-user", "dummy", "age1abcdef"], "add user"),
-            (["admin", "remove-user", "dummy"], "remove user"),
             (["admin", "rotate-master-key"], "rotate master key"),
         ]
 
@@ -325,6 +355,20 @@ def test_user_has_no_access(user_name, user_secret_path):
                     False,
                     f"{user_name} {operation_name} operation failed but without 'Access denied' error: {stderr}",
                 )
+
+        # Verify with valid user that dummy user was not actually added
+        returncode, users_stdout, stderr = run_age_store_command(
+            ["admin", "list-users"],
+            description=f"verify dummy user not added using {valid_user_name} credentials",
+            user_secret_path=valid_user_secret_path,
+        )
+        if not verbose_check(f"valid user can list users", returncode == 0):
+            return False, f"{valid_user_name} cannot list users: {stderr}"
+
+        if not verbose_check(
+            f"dummy user not in user list", "dummy" not in users_stdout
+        ):
+            return False, f"User 'dummy' was incorrectly added to users: {users_stdout}"
 
         return True, None
 
@@ -695,10 +739,69 @@ def test_user_removal():
             f"User2 pubkey changed after removal: {original_pubkey} -> {current_pubkey}",
         )
 
-    # Test that user2 has lost access using the no access test function
-    success, error_message = test_user_has_no_access("user2", USER2_SECRET)
-    if not success:
-        return False, error_message
+    # Add a test file using valid user (user1) for remove-user testing
+    test_remove_filename, test_remove_content = generate_random_content()
+    test_remove_file = create_test_file(test_remove_filename, test_remove_content)
+
+    try:
+        returncode, stdout, stderr = run_age_store_command(
+            ["add", test_remove_file.name],
+            description=f"add {test_remove_filename} for remove-user test using user1 credentials",
+            user_secret_path=USER1_SECRET,
+        )
+        if not verbose_check("test file added for remove-user test", returncode == 0):
+            return False, f"Failed to add test file for remove-user test: {stderr}"
+
+        # Test that user2 has lost access using the no access test function
+        success, error_message = test_user_has_no_access(
+            "user2", USER2_SECRET, "user1", USER1_SECRET
+        )
+        if not success:
+            return False, error_message
+
+        # Test remove-user operation (try to remove user1 which should fail since user2 has no access)
+        admin_operations = [
+            (["admin", "remove-user", "user1"], "remove user"),
+        ]
+
+        for admin_command, operation_name in admin_operations:
+            returncode, stdout, stderr = run_age_store_command(
+                admin_command,
+                description=f"try to {operation_name} using user2 credentials (should fail)",
+                user_secret_path=USER2_SECRET,
+            )
+            if not verbose_check(
+                f"user2 {operation_name} operation fails", returncode != 0
+            ):
+                return False, f"user2 can still perform {operation_name} after removal"
+
+            if not verbose_check(
+                f"user2 {operation_name} operation shows access denied",
+                "Access denied" in stderr,
+            ):
+                return (
+                    False,
+                    f"user2 {operation_name} operation failed but without 'Access denied' error: {stderr}",
+                )
+
+        # Verify with valid user that user1 still exists in the user list (wasn't removed)
+        returncode, users_stdout, stderr = run_age_store_command(
+            ["admin", "list-users"],
+            description=f"verify user1 still exists using user1 credentials",
+            user_secret_path=USER1_SECRET,
+        )
+        if not verbose_check("valid user can list users", returncode == 0):
+            return False, f"user1 cannot list users: {stderr}"
+
+        if not verbose_check(
+            "user1 still exists after failed remove", "user1" in users_stdout
+        ):
+            return False, f"User1 was incorrectly removed from users: {users_stdout}"
+
+    finally:
+        # Clean up test file
+        if test_remove_file.exists():
+            test_remove_file.unlink()
 
     return True, None
 
