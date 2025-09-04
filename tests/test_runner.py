@@ -91,6 +91,12 @@ def run_age_store_command(
 
         print(f"{command_color}age-store.py {args_str}{T.clear}")
 
+        # Print stderr first if it exists (with yellow border)
+        if result.stderr.strip():
+            print_with_left_border(
+                result.stderr.rstrip(), border_color=T.yellow, text_color=T.grey
+            )
+        
         # Print output if verbose mode is enabled
         if verbose and result.stdout.strip():
             print_with_left_border(
@@ -122,14 +128,10 @@ def create_test_file(filename, content):
 
 
 def extract_public_key(output):
-    """Extract age public key from command output, ignoring warnings."""
-    lines = output.strip().split("\n")
-    for line in lines:
-        line = line.strip()
-        # Look for line starting with "age1" directly
-        if line.startswith("age1"):
-            return line
-    return None
+    """Extract age public key from command output."""
+    # Remove only one trailing newline, preserve exact format
+    cleaned = output.rstrip('\n')
+    return cleaned if cleaned.startswith("age1") else None
 
 
 def generate_random_content():
@@ -193,11 +195,11 @@ def test_user_has_access(user_name, user_secret_path):
             return False, f"{user_name} cannot view files: {stderr}"
 
         if not verbose_check(
-            f"{user_name} file content matches", stdout.strip() == test_content
+            f"{user_name} file content matches", stdout == test_content
         ):
             return (
                 False,
-                f"{user_name} file content mismatch. Expected: '{test_content}', Got: '{stdout.strip()}'",
+                f"{user_name} file content mismatch. Expected: '{test_content}', Got: '{stdout}'",
             )
 
         # Test 4: List users and verify user is included
@@ -271,9 +273,9 @@ def test_user_has_no_access(user_name, user_secret_path):
             description="get existing files for view test",
             user_secret_path=USER1_SECRET,
         )
-        if returncode == 0 and user1_listing.strip():
+        if returncode == 0 and user1_listing:
             existing_files = [
-                f.strip() for f in user1_listing.strip().split("\n") if f.strip()
+                f for f in user1_listing.split("\n") if f
             ]
             if existing_files:
                 test_file_to_view = existing_files[0]
@@ -488,10 +490,10 @@ def test_add_and_list_users():
         return False, f"user2 not found in list-users output: {stdout}"
 
     # Should show exactly 2 users
-    lines = stdout.strip().split("\n")
-    # Count lines that contain user entries (skip header lines)
+    lines = stdout.split("\n")
+    # Count lines that contain user entries
     user_count = sum(
-        1 for line in lines if line.strip() and ("user1" in line or "user2" in line)
+        1 for line in lines if line and ("user1" in line or "user2" in line)
     )
 
     if not verbose_check("exactly 2 users found", user_count == 2):
@@ -602,8 +604,8 @@ def test_master_key_rotation():
     # Verify file listing is the same before and after rotation
     if not verbose_check(
         "file listing unchanged after rotation",
-        set(listing_before.strip().split("\n"))
-        == set(listing_after.strip().split("\n")),
+        set(listing_before.split("\n"))
+        == set(listing_after.split("\n")),
     ):
         return (
             False,
@@ -634,11 +636,11 @@ def test_master_key_rotation():
 
             if not verbose_check(
                 f"{user_name} {filename} content matches",
-                stdout.strip() == expected_content,
+                stdout == expected_content,
             ):
                 return (
                     False,
-                    f"{user_name} {filename} content mismatch after rotation. Expected: '{expected_content}', Got: '{stdout.strip()}'",
+                    f"{user_name} {filename} content mismatch after rotation. Expected: '{expected_content}', Got: '{stdout}'",
                 )
 
     return True, None

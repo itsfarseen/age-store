@@ -24,6 +24,10 @@ MASTER_KEY_FILE = Path("master-key.age.enc")
 # Global variable for user secret file path (set by set_user_secret_file)
 USER_SECRET_FILE: Path = None  # type: ignore
 
+# Error print alias for stderr output
+def eprint(*args, **kwargs):
+    print(*args, **kwargs, file=sys.stderr)
+
 
 def set_user_secret_file(user_secret_path: str | None = None):
     """Set the global USER_SECRET_FILE based on command line arg or default logic.
@@ -58,10 +62,10 @@ def load_users_config() -> dict:
         with open(USERS_CONFIG_FILE, "r") as f:
             return json.load(f)
     except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON in {USERS_CONFIG_FILE}: {e}")
+        eprint(f"Error: Invalid JSON in {USERS_CONFIG_FILE}: {e}")
         sys.exit(1)
     except IOError as e:
-        print(f"Error: Cannot read {USERS_CONFIG_FILE}: {e}")
+        eprint(f"Error: Cannot read {USERS_CONFIG_FILE}: {e}")
         sys.exit(1)
 
 
@@ -90,7 +94,7 @@ def age(args: list[str], input_data: bytes | None = None) -> bytes:
     try:
         return exec_bytes(["age", *args], input_data)
     except FileNotFoundError:
-        print(
+        eprint(
             f"Error: 'age' is not installed. Please visit {AGE_REPO_URL} for installation instructions."
         )
         sys.exit(1)
@@ -101,7 +105,7 @@ def age_keygen(args: list[str], input_data: bytes | None = None) -> bytes:
     try:
         return exec_bytes(["age-keygen", *args], input_data)
     except FileNotFoundError:
-        print(
+        eprint(
             f"Error: 'age-keygen' is not installed. Please visit {AGE_REPO_URL} for installation instructions."
         )
         sys.exit(1)
@@ -191,8 +195,8 @@ def read_user_secret() -> str:
     - If file doesn't exist, show error with init hint.
     """
     if not USER_SECRET_FILE.exists():
-        print(f"Error: User secret file {USER_SECRET_FILE} not found.")
-        print("Run 'age-store.py init-user' to create a user secret.")
+        eprint(f"Error: User secret file {USER_SECRET_FILE} not found.")
+        eprint("Run 'age-store.py init-user' to create a user secret.")
         sys.exit(1)
 
     if USER_SECRET_FILE.suffix == ".enc" or USER_SECRET_FILE.name.endswith(".age.enc"):
@@ -200,21 +204,20 @@ def read_user_secret() -> str:
         try:
             return age_decrypt_file_with_passphrase(USER_SECRET_FILE)
         except RuntimeError as e:
-            print(f"Error: Failed to decrypt {USER_SECRET_FILE}: {e}")
+            eprint(f"Error: Failed to decrypt {USER_SECRET_FILE}: {e}")
             sys.exit(1)
     else:
         # Plain file - warn if using unencrypted secret file
-        print(
-            f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (.enc suffix).",
-            file=sys.stderr,
+        eprint(
+            f"Warning: Using unencrypted user secret at {USER_SECRET_FILE}. Consider using an encrypted secret (.enc suffix)."
         )
 
         # Check permissions
         if check_file_is_world_accessible(USER_SECRET_FILE):
-            print(
+            eprint(
                 f"Error: User secret file {USER_SECRET_FILE} is readable by group or others"
             )
-            print(f"Fix with: chmod 600 {USER_SECRET_FILE}")
+            eprint(f"Fix with: chmod 600 {USER_SECRET_FILE}")
             sys.exit(1)
 
         # Read and return the private key
@@ -225,7 +228,7 @@ def read_user_secret() -> str:
 def get_master_private_key() -> str:
     """Get the master private key for the current user."""
     if not MASTER_KEY_FILE.exists():
-        print(
+        eprint(
             f"Error: Master password file {MASTER_KEY_FILE} not found. Run 'admin bootstrap' first."
         )
         sys.exit(1)
@@ -239,7 +242,7 @@ def get_master_private_key() -> str:
     # Check if user's public key is in users.json
     users_config = load_users_config()
     if user_public_key not in users_config.values():
-        print("Error: Access denied")
+        eprint("Error: Access denied")
         sys.exit(1)
 
     # Decrypt master private key using user's private key (text output)
@@ -280,7 +283,7 @@ def cmd_bootstrap(initial_user: str):
 
     # Check if already bootstrapped
     if MASTER_KEY_FILE.exists():
-        print("Error: Secret store already bootstrapped.")
+        eprint("Error: Secret store already bootstrapped.")
         sys.exit(1)
 
     # Read user secret and get public key from private key
@@ -307,7 +310,7 @@ def cmd_add_file(file_path_str: str):
     file_path = Path(file_path_str)
 
     if not file_path.exists():
-        print(f"Error: File {file_path} not found")
+        eprint(f"Error: File {file_path} not found")
         sys.exit(1)
 
     # Get master private key
@@ -337,11 +340,11 @@ def cmd_add_file(file_path_str: str):
         elif response == "r":
             new_name = input(f"Enter new filename (without .enc): ").strip()
             if not new_name:
-                print("Error: No filename provided, skipping")
+                eprint("Error: No filename provided, skipping")
                 return
             secret_file = STORE_DIR / f"{new_name}.enc"
             if secret_file.exists():
-                print(f"Error: File {secret_file} already exists, try again")
+                eprint(f"Error: File {secret_file} already exists, try again")
                 continue
         else:  # Default to 'n' or any other input
             print(f"Skipping {file_path}: not overwritten")
@@ -358,7 +361,7 @@ def cmd_view_file(filename: str):
     secret_file = STORE_DIR / f"{filename}.enc"
 
     if not secret_file.exists():
-        print(f"Error: Secret file {secret_file} not found")
+        eprint(f"Error: Secret file {secret_file} not found")
         sys.exit(1)
 
     # Get master private key
@@ -371,7 +374,7 @@ def cmd_view_file(filename: str):
         sys.stdout.buffer.write(content)
         sys.stdout.buffer.flush()
     except RuntimeError as e:
-        print(f"Error: {e}")
+        eprint(f"Error: {e}")
         sys.exit(1)
 
 
@@ -381,7 +384,7 @@ def cmd_add_user(username: str, age_pubkey: str):
     users_config = load_users_config()
 
     if username in users_config:
-        print(f"Error: User {username} already has access")
+        eprint(f"Error: User {username} already has access")
         sys.exit(1)
 
     # Get master private key to verify we have admin access
@@ -406,15 +409,15 @@ def cmd_add_user(username: str, age_pubkey: str):
 
 def cmd_remove_user(username: str):
     """Remove a user's access to secrets."""
+    # Get old master private key (this verifies the calling user has access)
+    old_master_private_key = get_master_private_key()
+    
     # Check if user exists in users.json
     users_config = load_users_config()
 
     if username not in users_config:
-        print(f"Error: User {username} does not have access")
+        eprint(f"Error: User {username} does not exist")
         sys.exit(1)
-
-    # Get old master private key
-    old_master_private_key = get_master_private_key()
 
     # Remove user from users
     del users_config[username]
@@ -489,16 +492,16 @@ def cmd_init_user(unencrypted: bool):
             target_file.suffix == ".enc" or target_file.name.endswith(".age.enc")
         )
         if unencrypted and is_encrypted_extension:
-            print(
+            eprint(
                 f"Error: --unencrypted specified but target file {target_file} has encrypted extension (.enc)"
             )
-            print("Use a plain file extension or remove --unencrypted flag")
+            eprint("Use a plain file extension or remove --unencrypted flag")
             sys.exit(1)
         elif not unencrypted and not is_encrypted_extension:
-            print(
+            eprint(
                 f"Error: encrypted mode selected but target file {target_file} does not have encrypted extension (.enc)"
             )
-            print("Use an .enc extension or add --unencrypted flag")
+            eprint("Use an .enc extension or add --unencrypted flag")
             sys.exit(1)
     else:
         # Use default paths
@@ -519,10 +522,10 @@ def cmd_init_user(unencrypted: bool):
 
     # Prevent overwriting existing secrets
     if target_file.exists():
-        print(f"Error: User secret already exists at {target_file}")
+        eprint(f"Error: User secret already exists at {target_file}")
         sys.exit(1)
     if temp_file and temp_file.exists():
-        print(f"Error: Temporary file {temp_file} already exists")
+        eprint(f"Error: Temporary file {temp_file} already exists")
         sys.exit(1)
 
     # Generate age keypair for the user
@@ -562,10 +565,10 @@ def cmd_init_user(unencrypted: bool):
             f"Note: Plaintext private key also present at {temp_file} (permissions 600)."
         )
     except FileNotFoundError as e:
-        print(f"Error: Required command not found: {e}")
+        eprint(f"Error: Required command not found: {e}")
         sys.exit(1)
     except RuntimeError as e:
-        print(f"Error: {e}")
+        eprint(f"Error: {e}")
         sys.exit(1)
 
 
@@ -579,33 +582,31 @@ def cmd_show_pubkey():
         public_key = age_keygen_public_from_private(user_private_key)
         print(public_key)
     except RuntimeError as e:
-        print(f"Error: Failed to derive public key: {e}")
+        eprint(f"Error: Failed to derive public key: {e}")
         sys.exit(1)
 
 
 def cmd_list_users():
     """List all users with access to secrets."""
-    print("Users with access to secrets:")
     users = get_all_users()
     if users:
         for user in sorted(users):
-            print(f"  {user}")
+            print(user)
     else:
-        print("  No users found")
+        eprint("No users found")
 
 
 def cmd_list_store():
     """List all available secrets."""
-    print("Available secrets:")
     secrets = []
     for secret_file in STORE_DIR.glob("*.enc"):
         secrets.append(secret_file.stem)
 
     if secrets:
         for secret in sorted(secrets):
-            print(f"  {secret}")
+            print(secret)
     else:
-        print("  No secrets found")
+        eprint("No secrets found")
 
 
 def cmd_doctor():
@@ -711,7 +712,7 @@ def cmd_migrate_encrypt_user_secret():
         source_file = USER_SECRET_FILE
 
         if source_file.suffix == ".enc" or source_file.name.endswith(".age.enc"):
-            print(f"Error: Source file {source_file} is already encrypted")
+            eprint(f"Error: Source file {source_file} is already encrypted")
             sys.exit(1)
 
         # Derive encrypted target by adding .enc extension
@@ -726,11 +727,11 @@ def cmd_migrate_encrypt_user_secret():
 
     # Preconditions
     if not source_file.exists():
-        print(f"Error: Plaintext secret {source_file} not found.")
+        eprint(f"Error: Plaintext secret {source_file} not found.")
         sys.exit(1)
 
     if target_file.exists():
-        print(f"Error: Encrypted file {target_file} already exists")
+        eprint(f"Error: Encrypted file {target_file} already exists")
         sys.exit(1)
 
     # Run age -p to produce encrypted file
@@ -738,18 +739,18 @@ def cmd_migrate_encrypt_user_secret():
         target_file.parent.mkdir(parents=True, exist_ok=True)
         age_encrypt_file_with_passphrase(source_file, target_file)
     except RuntimeError as e:
-        print(f"Error: Failed to encrypt user secret: {e}")
+        eprint(f"Error: Failed to encrypt user secret: {e}")
         sys.exit(1)
 
     # Verify encrypted file now exists, then remove plaintext
     if not target_file.exists():
-        print(f"Error: Failed to create {target_file}")
+        eprint(f"Error: Failed to create {target_file}")
         sys.exit(1)
 
     try:
         source_file.unlink()
     except OSError as e:
-        print(f"Error: Encrypted file created but failed to delete plaintext: {e}")
+        eprint(f"Error: Encrypted file created but failed to delete plaintext: {e}")
         sys.exit(1)
 
     print(f"Migrated user secret to {target_file} and removed {source_file}")
@@ -918,10 +919,10 @@ def main():
         elif args.command == "doctor":
             cmd_doctor()
     except KeyboardInterrupt:
-        print("\nOperation cancelled")
+        eprint("\nOperation cancelled")
         sys.exit(1)
     except Exception as e:
-        print(f"Error: {e}")
+        eprint(f"Error: {e}")
         sys.exit(1)
 
 
