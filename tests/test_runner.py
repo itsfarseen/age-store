@@ -54,7 +54,6 @@ def cleanup_and_setup():
 
 def run_age_store_command(
     command,
-    capture_output=True,
     input_text=None,
     description=None,
     user_secret_path=None,
@@ -80,33 +79,29 @@ def run_age_store_command(
         end="\r",
     )
 
-    if capture_output:
-        result = subprocess.run(cmd, capture_output=True, text=True, input=input_text)
+    result = subprocess.run(cmd, capture_output=True, text=True, input=input_text)
 
-        # Rewrite the line with success/failure color
-        if result.returncode == 0:
-            command_color = T.green
-        else:
-            command_color = T.red
-
-        print(f"{command_color}age-store.py {args_str}{T.clear}")
-
-        # Print stderr first if it exists (with yellow border)
-        if result.stderr.strip():
-            print_with_left_border(
-                result.stderr.rstrip(), border_color=T.yellow, text_color=T.grey
-            )
-
-        # Print output if verbose mode is enabled
-        if verbose and result.stdout.strip():
-            print_with_left_border(
-                result.stdout.rstrip(), border_color=T.grey, text_color=T.grey
-            )
-
-        return result.returncode, result.stdout, result.stderr
+    # Rewrite the line with success/failure color
+    if result.returncode == 0:
+        command_color = T.green
     else:
-        result = subprocess.run(cmd, input=input_text, text=True, cwd=".")
-        return result.returncode, "", ""
+        command_color = T.red
+
+    print(f"{command_color}age-store.py {args_str}{T.clear}")
+
+    # Print stderr first if it exists (with yellow border)
+    if result.stderr.strip():
+        print_with_left_border(
+            result.stderr.rstrip(), border_color=T.yellow, text_color=T.grey
+        )
+
+    # Print output if verbose mode is enabled
+    if verbose and result.stdout.strip():
+        print_with_left_border(
+            result.stdout.rstrip(), border_color=T.grey, text_color=T.grey
+        )
+
+    return result.returncode, result.stdout, result.stderr
 
 
 def verbose_check(description, condition):
