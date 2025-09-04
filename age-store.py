@@ -17,12 +17,38 @@ VERSION = 0.2
 AGE_REPO_URL = "https://github.com/FiloSottile/age"
 STORE_DIR = Path("store")
 USERS_CONFIG_FILE = Path("users.json")
-DEFAULT_USER_SECRET_FILE = Path("user-secret.age")
 DEFAULT_USER_SECRET_ENC_FILE = Path("user-secret.age.enc")
 MASTER_KEY_FILE = Path("master-key.age.enc")
 
 # Global variable for user secret file path (set by set_user_secret_file)
 USER_SECRET_FILE: Path = None  # type: ignore
+
+
+def enc_suffix_add(file_path: Path) -> Path:
+    """Add .enc suffix to a file path.
+
+    Args:
+        file_path: Path to add .enc suffix to
+
+    Returns:
+        Path with .enc suffix added
+    """
+    return file_path.with_suffix(file_path.suffix + ".enc")
+
+
+def enc_suffix_remove(file_path: Path) -> Path:
+    """Remove .enc suffix from a file path.
+
+    Args:
+        file_path: Path to remove .enc suffix from
+
+    Returns:
+        Path with .enc suffix removed
+    """
+    if file_path.suffix == ".enc":
+        return file_path.with_suffix("")
+    else:
+        return file_path
 
 
 # Error print alias for stderr output
@@ -41,12 +67,14 @@ def set_user_secret_file(user_secret_path: str | None = None):
     if user_secret_path:
         # Use the provided path
         USER_SECRET_FILE = Path(user_secret_path)
-    elif DEFAULT_USER_SECRET_FILE.exists():
-        # Use unencrypted file if it exists
-        USER_SECRET_FILE = DEFAULT_USER_SECRET_FILE
     else:
-        # Default to encrypted file
-        USER_SECRET_FILE = DEFAULT_USER_SECRET_ENC_FILE
+        default_unenc_file = enc_suffix_remove(DEFAULT_USER_SECRET_ENC_FILE)
+        if default_unenc_file.exists():
+            # Use unencrypted file if it exists
+            USER_SECRET_FILE = default_unenc_file
+        else:
+            # Default to encrypted file
+            USER_SECRET_FILE = DEFAULT_USER_SECRET_ENC_FILE
 
 
 def ensure_directories():
@@ -481,8 +509,9 @@ def cmd_init_user(unencrypted: bool):
     - Otherwise, encrypt the private key with a passphrase and save to the specified path or user-secret.age.enc.
     """
     # Determine output files based on global USER_SECRET_FILE or defaults
+    default_unenc_file = enc_suffix_remove(DEFAULT_USER_SECRET_ENC_FILE)
     if (
-        USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE
+        USER_SECRET_FILE != default_unenc_file
         and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE
     ):
         # Custom path specified via --user-secret
@@ -507,17 +536,12 @@ def cmd_init_user(unencrypted: bool):
     else:
         # Use default paths
         target_file = (
-            DEFAULT_USER_SECRET_FILE if unencrypted else DEFAULT_USER_SECRET_ENC_FILE
+            default_unenc_file if unencrypted else DEFAULT_USER_SECRET_ENC_FILE
         )
 
     # For encrypted mode, derive temp file by removing .enc extension
     if not unencrypted:
-        if target_file.name.endswith(".age.enc"):
-            temp_file = target_file.with_name(target_file.name[:-4])  # Remove .enc
-        elif target_file.suffix == ".enc":
-            temp_file = target_file.with_suffix("")  # Remove .enc suffix
-        else:
-            temp_file = target_file.with_suffix(".age")  # Add .age extension
+        temp_file = enc_suffix_remove(target_file)
     else:
         temp_file = None
 
@@ -628,22 +652,23 @@ def cmd_doctor():
         results.append(("OK", "'age-keygen' is installed"))
 
     # Secret encryption status and permissions
-    if DEFAULT_USER_SECRET_FILE.exists():
+    default_unenc_file = enc_suffix_remove(DEFAULT_USER_SECRET_ENC_FILE)
+    if default_unenc_file.exists():
         results.append(
-            ("WARN", f"Unencrypted user secret present at {DEFAULT_USER_SECRET_FILE}")
+            ("WARN", f"Unencrypted user secret present at {default_unenc_file}")
         )
-        if check_file_is_world_accessible(DEFAULT_USER_SECRET_FILE):
+        if check_file_is_world_accessible(default_unenc_file):
             results.append(
                 (
                     "ERROR",
-                    f"Permissions for {DEFAULT_USER_SECRET_FILE} are too open; run: chmod 600 {DEFAULT_USER_SECRET_FILE}",
+                    f"Permissions for {default_unenc_file} are too open; run: chmod 600 {default_unenc_file}",
                 )
             )
         else:
             results.append(
                 (
                     "OK",
-                    f"Permissions for {DEFAULT_USER_SECRET_FILE} are 600 (owner-only)",
+                    f"Permissions for {default_unenc_file} are 600 (owner-only)",
                 )
             )
     elif DEFAULT_USER_SECRET_ENC_FILE.exists():
@@ -656,8 +681,8 @@ def cmd_doctor():
     # Attempt to load current user's private key (may prompt if encrypted)
     user_private_key: str | None = None
     try:
-        if DEFAULT_USER_SECRET_FILE.exists():
-            with open(DEFAULT_USER_SECRET_FILE, "r") as f:
+        if default_unenc_file.exists():
+            with open(default_unenc_file, "r") as f:
                 user_private_key = f.read().strip()
         elif DEFAULT_USER_SECRET_ENC_FILE.exists():
             user_private_key = age_decrypt_file_with_passphrase(
@@ -708,8 +733,9 @@ def cmd_doctor():
 def cmd_migrate_encrypt_user_secret():
     """Encrypt plaintext user secret to encrypted version and delete plaintext."""
     # Determine source file from --user-secret argument or default
+    default_unenc_file = enc_suffix_remove(DEFAULT_USER_SECRET_ENC_FILE)
     if (
-        USER_SECRET_FILE != DEFAULT_USER_SECRET_FILE
+        USER_SECRET_FILE != default_unenc_file
         and USER_SECRET_FILE != DEFAULT_USER_SECRET_ENC_FILE
     ):
         # Custom path specified via --user-secret (treated as source)
@@ -720,13 +746,10 @@ def cmd_migrate_encrypt_user_secret():
             sys.exit(1)
 
         # Derive encrypted target by adding .enc extension
-        if source_file.suffix == ".age":
-            target_file = source_file.with_suffix(".age.enc")
-        else:
-            target_file = source_file.with_suffix(source_file.suffix + ".enc")
+        target_file = enc_suffix_add(source_file)
     else:
         # Use default files
-        source_file = DEFAULT_USER_SECRET_FILE
+        source_file = default_unenc_file
         target_file = DEFAULT_USER_SECRET_ENC_FILE
 
     # Preconditions
