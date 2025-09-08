@@ -1,0 +1,73 @@
+-- 📑 ShellSpec Syntax Reference
+
+-- Comments
+-- Comment (visible in output)
+$. cmd args -- Trailing comment on commands
+
+-- Test Cases
+> Test case description
+
+-- Snippets
+>@ snippet_name       -- define reusable snippet
+:. @ snippet_name     -- invoke snippet
+
+-- Shell Commands
+$. cmd args           -- run command, expect success (exit 0)
+$! cmd args           -- run command, expect failure (non-zero exit)
+
+-- Pexpect Process Interaction
+$< "expected_text"    -- expect("expected_text")
+$> "input_text"       -- sendline("input_text")
+
+-- Assertions
+?. stdout "text"      -- stdout must contain "text"
+?! stdout "text"      -- stdout must NOT contain "text"
+?. stderr "text"      -- stderr must contain "text"
+?! stderr "text"      -- stderr must NOT contain "text"
+
+?. file "path"                 -- file must exist
+?! file "path"                 -- file must not exist
+?. file "path" "content"       -- file must contain substring
+?. file "path" ! "content"     -- file exists but must NOT contain substring
+
+-- Exact file content check:
+?. file "path"
+.. line one
+.. line two
+
+-- Variable Operations
+:. stdout @var        -- store stdout in variable @var
+:. stderr @var        -- store stderr in variable @var
+?. == @var "value"    -- check variable equals value
+?. != @var1 @var2     -- check variables are different
+?. startswith @var "prefix"
+?. endswith @var "suffix"
+?. contains @var "substring"
+
+-- File Creation
+:. file "path" [mode] -- create file with optional octal mode
+.. line content       -- append line to file
+.. another line       -- append another line
+
+-- Content Lines
+-- .. content            append to previous :. command
+-- used for file content or exact assertions
+
+-- Example Usage
+>@ setup_user
+$. age-store.py init-user --unencrypted
+$. age-store.py admin bootstrap user1
+
+> Test file operations with variables
+:. @ setup_user              -- invoke setup snippet
+$. age-store.py show-pubkey
+:. stdout @user_pubkey       -- store pubkey in @user_pubkey variable
+:. file test.txt             -- create test file
+.. Hello world
+.. Second line
+$. age-store.py add test.txt -- add file with comment
+?. file "test.txt.enc"       -- verify encrypted file exists
+$. age-store.py view test.txt
+?. stdout "Hello world"      -- verify content
+$. age-store.py admin add-user newuser @user_pubkey  -- use variable in command
+?. == @user_pubkey @user_pubkey  -- compare variables
