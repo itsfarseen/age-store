@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2 (2025-09-04)
+## 0.2 (2025-09-09)
 
 **Encrypted user secrets**
 - `init-user` now generates a passphrase-encrypted keypair (saved as `user-secret.age.enc`).
@@ -9,6 +9,14 @@
   existing plaintext `user-secret.age` to an encrypted `user-secret.age.enc`.
   Existing unencrypted keypairs continue to work; migration is optional.
 - Show a warning when an unencrypted keypair (`user-secret.age`) is used.
+
+**Migration from v0.1 (unencrypted user secrets):**
+If you have an existing `user-secret.age` file from v0.1, you can continue using it as-is (you'll see a warning). To migrate to encrypted user secrets for better security:
+1. Run `./age-store.py migrate encrypt-user-secret`
+2. Enter a strong passphrase when prompted
+3. Your plaintext `user-secret.age` will be encrypted and saved as `user-secret.age.enc`
+4. The original plaintext file will be deleted
+5. Future operations will prompt for your passphrase
 
 **Other changes**
 - Add `doctor` command to run health checks.

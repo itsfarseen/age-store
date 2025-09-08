@@ -1,5 +1,7 @@
 # Age Store
 
+> **📋 See [CHANGELOG.md](CHANGELOG.md) for version history and migration instructions**
+
 A simple, secure secret management system built on the proven [age encryption](https://age-encryption.org/) standard. Age Store makes it easy to share encrypted files across teams using familiar command-line tools.
 
 ## Why Age Store?
@@ -24,10 +26,10 @@ chmod +x age-store.py
 ./age-store.py admin bootstrap myusername
 
 # 4. Add your first secret
-./age-store.py add-file my-secret-file
+./age-store.py add my-secret-file
 
 # 5. View it anytime
-./age-store.py view-file my-secret-file
+./age-store.py view my-secret-file
 ```
 
 That's it! Your secrets are now encrypted and ready to share with your team.
@@ -41,12 +43,12 @@ That's it! Your secrets are now encrypted and ready to share with your team.
 
 ```bash
 # Add any file to the encrypted store
-./age-store.py add-file config.json
-./age-store.py add-file .env
+./age-store.py add config.json
+./age-store.py add .env
 
 # View files instantly 
-./age-store.py view-file config.json
-./age-store.py list-files
+./age-store.py view config.json
+./age-store.py ls
 
 # Share access with teammates
 ./age-store.py admin add-user alice age1abc123...
@@ -70,26 +72,31 @@ Age public key: age1alice123...
 bob$ ./age-store.py admin add-user alice age1alice123...
 
 # Now Alice can access all secrets
-alice$ ./age-store.py view-file shared-config.json
+alice$ ./age-store.py view shared-config.json
 ```
 
 ## Commands Reference
 
-### Daily Use
-- `add-file <file>` - Encrypt and store any file
-- `view-file <name>` - Decrypt and view a stored file  
-- `list-files` - See all your encrypted files
-
-### Setup & Team Management
-- `init-user` - Generate your age keypair (run once)
+### Core Commands
+- `init-user [--unencrypted]` - Generate your age keypair (run once). By default creates encrypted keypair; use `--unencrypted` for plaintext
 - `show-pubkey` - Display your public key to share with teammates
-- `admin bootstrap <username>` - Initialize the store (first time only)
-- `admin add-user <name> <pubkey>` - Give someone access
-- `admin remove-user <name>` - Revoke access
-- `admin list-users` - See who has access
+- `version` - Show version information
+- `doctor` - Run health checks and diagnostics
 
-### Security Operations  
-- `admin rotate-master-key` - Rotate master key and re-encrypt everything
+### File Operations
+- `add <file> [--force]` - Encrypt and store any file. Use `--force` to overwrite existing files
+- `view <file>` - Decrypt and view a stored file (specify name without .enc extension)
+- `ls` - List all available encrypted files
+
+### Team Management (Admin)
+- `admin bootstrap <username>` - Initialize the store with initial user (first time only)
+- `admin add-user <username> <age_pubkey>` - Give someone access by adding their public key
+- `admin remove-user <username>` - Revoke a user's access
+- `admin list-users` - Show all users with access
+- `admin rotate-master-key` - Generate new master keypair and re-encrypt for all users
+
+### Migration Tools
+- `migrate encrypt-user-secret` - Convert plaintext `user-secret.age` to encrypted `user-secret.age.enc`
 
 ## File Layout
 
