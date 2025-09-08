@@ -316,3 +316,40 @@ $< Enter passphrase
 $> testpassword123
 ?. stdout "age1"
 ?! stderr "Error"
+
+> Init User Duplicate Secret Handling (unencrypted)
+-- Test unencrypted init twice with default secret location
+$. age-store.py init-user --unencrypted
+?. stdout "User initialization complete"
+?. file "user-secret.age"
+$! age-store.py init-user --unencrypted
+?. stderr "User secret already exists"
+-- Test unencrypted init twice with explicit user secret
+$. age-store.py --user-secret user-secrets/duplicate-test.age init-user --unencrypted
+?. stdout "User initialization complete"
+?. file "user-secrets/duplicate-test.age"
+$! age-store.py --user-secret user-secrets/duplicate-test.age init-user --unencrypted
+?. stderr "User secret already exists"
+
+
+> Init User Duplicate Secret Handling (encrypted)
+-- Test encrypted init twice with default secret location
+$. age-store.py init-user
+$< Enter passphrase
+$> testpassword123
+$< Confirm passphrase
+$> testpassword123
+?. stdout "User initialization complete"
+?. file "user-secret.age.enc"
+$! age-store.py init-user
+?. stderr "User secret already exists"
+-- Test encrypted init twice with explicit user secret
+$. age-store.py --user-secret user-secrets/encrypted-duplicate-test.age.enc init-user
+$< Enter passphrase
+$> testpassword123
+$< Confirm passphrase
+$> testpassword123
+?. stdout "User initialization complete"
+?. file "user-secrets/encrypted-duplicate-test.age.enc"
+$! age-store.py --user-secret user-secrets/encrypted-duplicate-test.age.enc init-user
+?. stderr "User secret already exists"
