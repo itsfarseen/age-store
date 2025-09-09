@@ -50,6 +50,9 @@ That's it! Your secrets are now encrypted and ready to share with your team.
 ./age-store.py view config.json
 ./age-store.py ls
 
+# Bundle multiple files with size headers
+./age-store.py bundle config.json .env secrets.txt
+
 # Share access with teammates
 ./age-store.py admin add-user alice age1abc123...
 ./age-store.py admin list-users
@@ -86,6 +89,15 @@ alice$ ./age-store.py view shared-config.json
 ### File Operations
 - `add <file> [--force]` - Encrypt and store any file. Use `--force` to overwrite existing files
 - `view <file>` - Decrypt and view a stored file (specify name without .enc extension)
+- `bundle <file1> <file2> ...` - Decrypt and output multiple files with headers showing file sizes in format `-- <size> <filename>`
+  ```
+  $ ./age-store.py bundle config.json .env
+  -- 156 config.json
+  {"api_key": "secret123", "db_host": "localhost"}
+  
+  -- 45 .env
+  DATABASE_URL=postgresql://user:pass@localhost/db
+  ```
 - `ls` - List all available encrypted files
 
 ### Team Management (Admin)

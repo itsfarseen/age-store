@@ -390,6 +390,36 @@ def cmd_view_file(filename: str):
         sys.exit(1)
 
 
+def cmd_bundle_files(filenames: list[str]):
+    """Bundle multiple files from the secret store with manifest header."""
+    # Get master private key
+    master_private_key = get_master_private_key()
+
+    # Collect file data and sizes
+    file_data = []
+    for filename in filenames:
+        secret_file = STORE_DIR / f"{filename}.enc"
+
+        if not secret_file.exists():
+            eprint(f"Error: Secret file {secret_file} not found")
+            sys.exit(1)
+
+        try:
+            content = age_decrypt_file_with_identity(secret_file, master_private_key)
+            file_data.append((filename, content))
+        except RuntimeError as e:
+            eprint(f"Error decrypting {filename}: {e}")
+            sys.exit(1)
+
+    # Output file contents with headers
+    for i, (filename, content) in enumerate(file_data):
+        if i > 0:
+            sys.stdout.buffer.write(b"\n")
+        sys.stdout.buffer.write(f"-- {len(content)} {filename}\n".encode())
+        sys.stdout.buffer.write(content)
+        sys.stdout.buffer.flush()
+
+
 def cmd_add_user(username: str, age_pubkey: str):
     """Add a user by adding their age public key to the system."""
     # Check if user already exists in users.json
@@ -821,6 +851,14 @@ def main():
         "file", help="Name of the file to view (without .enc extension)"
     )
 
+    # Bundle files command
+    bundle_files_parser = subparsers.add_parser(
+        "bundle", help="Bundle multiple files from the secret store with manifest"
+    )
+    bundle_files_parser.add_argument(
+        "files", nargs="+", help="Names of files to bundle (without .enc extension)"
+    )
+
     # Add file command
     add_file_parser = subparsers.add_parser(
         "add", help="Add a file to the secret store"
@@ -915,6 +953,8 @@ def main():
             cmd_add_file(args.file, args.force)
         elif args.command == "view":
             cmd_view_file(args.file)
+        elif args.command == "bundle":
+            cmd_bundle_files(args.files)
         elif args.command == "ls":
             cmd_list_store()
         elif args.command == "init-user":

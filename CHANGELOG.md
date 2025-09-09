@@ -1,5 +1,10 @@
 # Changelog
 
+## (Unreleased)
+
+**New features**
+- Add `bundle` command to decrypt and output multiple files in a single stream. Each file is prefixed with a header showing its size in the format `-- <size> <filename>`, making it easy to parse programmatically while remaining human-readable. Useful for extracting multiple secrets at once or processing files in scripts.
+
 ## 0.2 (2025-09-09)
 
 **Encrypted user secrets**

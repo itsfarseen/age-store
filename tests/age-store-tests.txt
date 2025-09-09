@@ -353,3 +353,51 @@ $> testpassword123
 ?. file "user-secrets/encrypted-duplicate-test.age.enc"
 $! age-store.py --user-secret user-secrets/encrypted-duplicate-test.age.enc init-user
 ?. stderr "User secret already exists"
+
+> Bundle Multiple Files
+:. @ setup_store
+# Create multiple test files
+:. file "bundle-test1.txt"
+.. First file content
+.. Line 2 of first file
+:. file "bundle-test2.txt"
+.. Second file content
+..
+:. file "bundle-test3.txt"
+.. Third file with more content
+.. Another line here
+.. Final line
+# Add files to store
+$. age-store.py --user-secret user-secrets/user1.age add bundle-test1.txt
+$. age-store.py --user-secret user-secrets/user1.age add bundle-test2.txt  
+$. age-store.py --user-secret user-secrets/user1.age add bundle-test3.txt
+# Test bundle command with multiple files
+$. age-store.py --user-secret user-secrets/user1.age bundle bundle-test1.txt bundle-test2.txt bundle-test3.txt
+?. stdout
+.. -- 39 bundle-test1.txt
+.. First file content
+.. Line 2 of first file
+.. -- 20 bundle-test2.txt
+.. Second file content
+..
+.. -- 57 bundle-test3.txt
+.. Third file with more content
+.. Another line here
+.. Final line
+
+> Bundle Single File
+:. @ setup_store
+:. file "single-bundle.txt"
+.. Single file for bundle test
+$. age-store.py --user-secret user-secrets/user1.age add single-bundle.txt
+# Test bundle command with single file
+$. age-store.py --user-secret user-secrets/user1.age bundle single-bundle.txt
+?. stdout
+.. -- 27 single-bundle.txt
+.. Single file for bundle test
+
+> Bundle Nonexistent File Error
+:. @ setup_store
+# Test bundle with nonexistent file
+$! age-store.py --user-secret user-secrets/user1.age bundle nonexistent.txt
+?. stderr "not found"
