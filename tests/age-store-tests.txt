@@ -401,3 +401,22 @@ $. age-store.py --user-secret user-secrets/user1.age bundle single-bundle.txt
 # Test bundle with nonexistent file
 $! age-store.py --user-secret user-secrets/user1.age bundle nonexistent.txt
 ?. stderr "not found"
+
+> Env Shell Basic
+:. @ setup_store
+# Create env file and secrets for testing
+:. file "secret1.txt"
+.. secret_value_1
+:. file "secret2.txt"
+.. secret_value_2
+$. age-store.py --user-secret user-secrets/user1.age add secret1.txt
+$. age-store.py --user-secret user-secrets/user1.age add secret2.txt
+# Create environment file
+:. file "test.env"
+.. FOO=secret1.txt
+.. BAR=secret2.txt
+# Test env-shell with printenv
+$. age-store.py --user-secret user-secrets/user1.age env-shell test.env --shell /bin/sh -- -c 'printenv FOO BAR'
+?. stdout
+.. secret_value_1
+.. secret_value_2

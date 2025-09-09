@@ -4,6 +4,7 @@
 
 **New features**
 - Add `bundle` command to decrypt and output multiple files in a single stream. Each file is prefixed with a header showing its size in the format `-- <size> <filename>`, making it easy to parse programmatically while remaining human-readable. Useful for extracting multiple secrets at once or processing files in scripts.
+- Add `env-shell` command to launch a shell with environment variables loaded from secrets. Takes an env file where each line is `VAR_NAME=secret-name`, decrypts the referenced secrets, and launches a shell with those values as environment variables. Supports custom shell selection with `--shell` option and passing arbitrary arguments using `--` separator.
 
 ## 0.2 (2025-09-09)
 

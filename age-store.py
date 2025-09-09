@@ -650,6 +650,78 @@ def cmd_list_store():
         eprint("No secrets found")
 
 
+def cmd_env_shell(env_file_path: str, shell: str = None, args: list[str] = None):
+    """Launch shell with environment variables loaded from secrets."""
+    env_file = Path(env_file_path)
+    
+    if not env_file.exists():
+        eprint(f"Error: Environment file {env_file} not found")
+        sys.exit(1)
+    
+    # Get master private key to access secrets
+    master_private_key = get_master_private_key()
+    
+    # Parse environment file and collect secrets
+    env_vars = {}
+    try:
+        with open(env_file, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                    
+                if '=' not in line:
+                    eprint(f"Error: Invalid format at line {line_num}: {line}")
+                    eprint("Expected format: VAR_NAME=secret-name")
+                    sys.exit(1)
+                
+                var_name, secret_name = line.split('=', 1)
+                var_name = var_name.strip()
+                secret_name = secret_name.strip()
+                
+                if not var_name or not secret_name:
+                    eprint(f"Error: Empty variable or secret name at line {line_num}: {line}")
+                    sys.exit(1)
+                
+                # Load secret content
+                secret_file = STORE_DIR / f"{secret_name}.enc"
+                if not secret_file.exists():
+                    eprint(f"Error: Secret file {secret_file} not found for variable {var_name}")
+                    sys.exit(1)
+                
+                try:
+                    content = age_decrypt_file_with_identity(secret_file, master_private_key)
+                    env_vars[var_name] = content.decode().strip()
+                except RuntimeError as e:
+                    eprint(f"Error: Failed to decrypt {secret_name} for {var_name}: {e}")
+                    sys.exit(1)
+    
+    except IOError as e:
+        eprint(f"Error: Cannot read environment file {env_file}: {e}")
+        sys.exit(1)
+    
+    # Determine shell to use
+    user_shell = shell or os.environ.get('SHELL', '/bin/sh')
+    
+    # Prepare command arguments
+    shell_args = [user_shell] + (args or [])
+    
+    # Prepare environment with loaded secrets
+    new_env = os.environ.copy()
+    new_env.update(env_vars)
+    
+    print(f"Launching {user_shell} with {len(env_vars)} environment variables from secrets...")
+    if args:
+        print(f"Shell arguments: {' '.join(args)}")
+    
+    # Launch shell with new environment
+    try:
+        os.execve(user_shell, shell_args, new_env)
+    except OSError as e:
+        eprint(f"Error: Failed to launch shell {user_shell}: {e}")
+        sys.exit(1)
+
+
 def cmd_doctor():
     """Run health checks and print a bullet list of results."""
     results: list[tuple[str, str]] = []
@@ -859,6 +931,20 @@ def main():
         "files", nargs="+", help="Names of files to bundle (without .enc extension)"
     )
 
+    # Env shell command
+    env_shell_parser = subparsers.add_parser(
+        "env-shell", help="Launch shell with environment variables from secrets"
+    )
+    env_shell_parser.add_argument(
+        "env_file", help="Environment file with VAR=secret-name pairs"
+    )
+    env_shell_parser.add_argument(
+        "--shell", help="Custom shell to launch (default: $SHELL or /bin/sh)"
+    )
+    env_shell_parser.add_argument(
+        "args", nargs="*", help="Arguments to pass to the shell (use -- to separate)"
+    )
+
     # Add file command
     add_file_parser = subparsers.add_parser(
         "add", help="Add a file to the secret store"
@@ -955,6 +1041,8 @@ def main():
             cmd_view_file(args.file)
         elif args.command == "bundle":
             cmd_bundle_files(args.files)
+        elif args.command == "env-shell":
+            cmd_env_shell(args.env_file, args.shell, args.args)
         elif args.command == "ls":
             cmd_list_store()
         elif args.command == "init-user":

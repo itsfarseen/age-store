@@ -53,6 +53,9 @@ That's it! Your secrets are now encrypted and ready to share with your team.
 # Bundle multiple files with size headers
 ./age-store.py bundle config.json .env secrets.txt
 
+# Launch shell with secrets as environment variables
+./age-store.py env-shell app.env
+
 # Share access with teammates
 ./age-store.py admin add-user alice age1abc123...
 ./age-store.py admin list-users
@@ -97,6 +100,18 @@ alice$ ./age-store.py view shared-config.json
   
   -- 45 .env
   DATABASE_URL=postgresql://user:pass@localhost/db
+  ```
+- `env-shell <env_file> [--shell <shell>] [-- <args>...]` - Launch shell with environment variables loaded from secrets
+  ```
+  # Create env file mapping variables to secret files
+  $ echo "API_KEY=api-key.txt" > app.env
+  $ echo "DB_PASSWORD=db-pass.txt" >> app.env
+  
+  # Launch shell with secrets as environment variables
+  $ ./age-store.py env-shell app.env
+  
+  # Use custom shell and pass arguments
+  $ ./age-store.py env-shell app.env --shell /bin/zsh -- -c 'echo $API_KEY'
   ```
 - `ls` - List all available encrypted files
 
