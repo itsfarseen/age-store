@@ -13,7 +13,7 @@ from pathlib import Path
 from shutil import which
 
 # Constants
-VERSION = 0.2
+VERSION = 0.3
 AGE_REPO_URL = "https://github.com/FiloSottile/age"
 STORE_DIR = Path("store")
 USERS_CONFIG_FILE = Path("users.json")
