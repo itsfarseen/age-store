@@ -1,5 +1,5 @@
+# Create test user with unencrypted key
 >@ setup_user
--- Create test user with unencrypted key
 $. age-store.py --user-secret user-secrets/user1.age init-user --unencrypted
 ?. stdout "User initialization complete"
 ?. stdout "Age public key:"
@@ -7,7 +7,7 @@ $. age-store.py --user-secret user-secrets/user1.age init-user --unencrypted
 
 >@ setup_store
 :. @ setup_user
--- Bootstrap store with test user
+# Bootstrap store with test user
 $. age-store.py --user-secret user-secrets/user1.age admin bootstrap user1
 ?. stdout "Bootstrap complete"
 ?. file "store"
@@ -15,13 +15,13 @@ $. age-store.py --user-secret user-secrets/user1.age admin bootstrap user1
 ?. file "master-key.age.enc"
 
 >@ create_test_file
--- Create a test file with known content
+# Create a test file with known content
 :. file "test-data.txt"
 .. Hello, World!
 .. This is test content.
 
 > User Initialization
--- Test basic user initialization functionality
+# Test basic user initialization functionality
 $. age-store.py --user-secret user-secrets/init-test.age init-user --unencrypted
 ?. stdout "User initialization complete"
 ?. stdout "Age public key: age1"
@@ -29,14 +29,14 @@ $. age-store.py --user-secret user-secrets/init-test.age init-user --unencrypted
 
 > Show Public Key
 :. @ setup_user
--- Test showing user's public key
+# Test showing user's public key
 $. age-store.py --user-secret user-secrets/user1.age show-pubkey
 ?. stdout "age1"
 ?! stderr "Error"
 
 > Store Bootstrap
 :. @ setup_user
--- Test bootstrapping a new store
+# Test bootstrapping a new store
 $. age-store.py --user-secret user-secrets/user1.age admin bootstrap user1
 ?. stdout "Bootstrap complete"
 ?. file "store"
@@ -46,14 +46,14 @@ $. age-store.py --user-secret user-secrets/user1.age admin bootstrap user1
 > Add File Basic
 :. @ setup_store
 :. @ create_test_file
--- Test adding a file to the store
+# Test adding a file to the store
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
 ?. stdout "added to secret store"
 ?. file "store/test-data.txt.enc"
 
 > List Files Empty
 :. @ setup_store
--- Test listing files when store is empty
+# Test listing files when store is empty
 $. age-store.py --user-secret user-secrets/user1.age ls
 ?. stdout ""
 
@@ -61,7 +61,7 @@ $. age-store.py --user-secret user-secrets/user1.age ls
 :. @ setup_store
 :. @ create_test_file
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
--- Test listing files when store has files
+# Test listing files when store has files
 $. age-store.py --user-secret user-secrets/user1.age ls
 ?. stdout "test-data.txt"
 
@@ -69,7 +69,7 @@ $. age-store.py --user-secret user-secrets/user1.age ls
 :. @ setup_store
 :. @ create_test_file
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
--- Test viewing file content from store
+# Test viewing file content from store
 $. age-store.py --user-secret user-secrets/user1.age view test-data.txt
 ?. stdout
 .. Hello, World!
@@ -79,7 +79,7 @@ $. age-store.py --user-secret user-secrets/user1.age view test-data.txt
 :. @ setup_store
 :. @ create_test_file
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
--- Test adding duplicate file without --force flag fails
+# Test adding duplicate file without --force flag fails
 $! age-store.py --user-secret user-secrets/user1.age add test-data.txt
 ?. stderr "already exists"
 ?. stderr "--force"
@@ -87,9 +87,9 @@ $! age-store.py --user-secret user-secrets/user1.age add test-data.txt
 > Add File Duplicate With Force
 :. @ setup_store
 :. @ create_test_file
--- Test adding duplicate file with --force flag succeeds
+# Test adding duplicate file with --force flag succeeds
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
--- Modify the test file
+# Modify the test file
 :. file "test-data.txt"
 .. Modified content
 $. age-store.py --user-secret user-secrets/user1.age add --force test-data.txt
@@ -100,15 +100,15 @@ $. age-store.py --user-secret user-secrets/user1.age view test-data.txt
 
 > List Users Single User
 :. @ setup_store
--- Test listing users with one user
+# Test listing users with one user
 $. age-store.py --user-secret user-secrets/user1.age admin list-users
 ?. stdout "user1"
 
 >@ add_second_user
--- Initialize second user
+# Initialize second user
 $. age-store.py --user-secret user-secrets/user2.age init-user --unencrypted
 ?. stdout "User initialization complete"
--- Get user2's public key and add to store
+# Get user2's public key and add to store
 $. age-store.py --user-secret user-secrets/user2.age show-pubkey
 :. stdout @user2_pubkey
 $. age-store.py --user-secret user-secrets/user1.age admin add-user user2 @user2_pubkey
@@ -121,7 +121,7 @@ $. age-store.py --user-secret user-secrets/user1.age admin add-user user2 @user2
 > List Users Multiple Users
 :. @ setup_store
 :. @ add_second_user
--- Test listing multiple users
+# Test listing multiple users
 $. age-store.py --user-secret user-secrets/user1.age admin list-users
 ?. stdout "user1"
 ?. stdout "user2"
@@ -131,7 +131,7 @@ $. age-store.py --user-secret user-secrets/user1.age admin list-users
 :. @ add_second_user
 :. @ create_test_file
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
--- Test that second user can access files
+# Test that second user can access files
 $. age-store.py --user-secret user-secrets/user2.age view test-data.txt
 ?. stdout
 .. Hello, World!
@@ -141,11 +141,11 @@ $. age-store.py --user-secret user-secrets/user2.age view test-data.txt
 :. @ setup_store
 :. @ create_test_file
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
--- Test master key rotation functionality
+# Test master key rotation functionality
 $. age-store.py --user-secret user-secrets/user1.age admin rotate-master-key
 ?. stdout "Re-encrypting secrets"
 ?. stdout "rotation complete"
--- Verify files still accessible
+# Verify files still accessible
 $. age-store.py --user-secret user-secrets/user1.age view test-data.txt
 ?. stdout
 .. Hello, World!
@@ -156,14 +156,14 @@ $. age-store.py --user-secret user-secrets/user1.age view test-data.txt
 :. @ add_second_user
 :. @ create_test_file
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
--- Remove user2
+# Remove user2
 $. age-store.py --user-secret user-secrets/user1.age admin remove-user user2
 ?. stdout "Removed user2's access"
--- Verify user1 can still list users after removal
+# Verify user1 can still list users after removal
 $. age-store.py --user-secret user-secrets/user1.age admin list-users
 ?! stdout "user2"
 ?. stdout "user1"
--- Test that removed users cannot access files
+# Test that removed users cannot access files
 $! age-store.py --user-secret user-secrets/user2.age ls
 ?. stderr "Access denied"
 
@@ -172,10 +172,10 @@ $! age-store.py --user-secret user-secrets/user2.age ls
 :. @ add_second_user
 $. age-store.py --user-secret user-secrets/user1.age admin remove-user user2
 :. @ create_test_file
--- Test that removed users cannot add files
+# Test that removed users cannot add files
 $! age-store.py --user-secret user-secrets/user2.age add test-data.txt
 ?. stderr "Access denied"
--- Verify no encrypted file was created despite denial
+# Verify no encrypted file was created despite denial
 ?! file "store/test-data.txt.enc"
 
 > Remove User View Operation Denied
@@ -184,7 +184,7 @@ $! age-store.py --user-secret user-secrets/user2.age add test-data.txt
 :. @ create_test_file
 $. age-store.py --user-secret user-secrets/user1.age add test-data.txt
 $. age-store.py --user-secret user-secrets/user1.age admin remove-user user2
--- Test that removed users cannot view files
+# Test that removed users cannot view files
 $! age-store.py --user-secret user-secrets/user2.age view test-data.txt
 ?. stderr "Access denied"
 
@@ -192,17 +192,17 @@ $! age-store.py --user-secret user-secrets/user2.age view test-data.txt
 :. @ setup_store
 :. @ add_second_user
 $. age-store.py --user-secret user-secrets/user1.age admin remove-user user2
--- Test that removed users can still list users but don't see themselves
+# Test that removed users can still list users but don't see themselves
 $. age-store.py --user-secret user-secrets/user2.age admin list-users
 ?! stdout "user2"
 ?. stdout "user1"
--- Test that removed users cannot add users
+# Test that removed users cannot add users
 $! age-store.py --user-secret user-secrets/user2.age admin add-user dummy age1dummy
 ?. stderr "Access denied"
--- Test that removed users cannot rotate master key
+# Test that removed users cannot rotate master key
 $! age-store.py --user-secret user-secrets/user2.age admin rotate-master-key
 ?. stderr "Access denied"
--- Verify store state unchanged after failed admin operations
+# Verify store state unchanged after failed admin operations
 $. age-store.py --user-secret user-secrets/user1.age admin list-users
 ?! stdout "dummy"
 ?! stdout "user2"
@@ -210,17 +210,17 @@ $. age-store.py --user-secret user-secrets/user1.age admin list-users
 
 > File Not Found Error
 :. @ setup_store
--- Test error handling for non-existent files
+# Test error handling for non-existent files
 $! age-store.py --user-secret user-secrets/user1.age view nonexistent.txt
 ?. stderr "not found"
 
 > Invalid User Secret
--- Test error handling for invalid user secret
+# Test error handling for invalid user secret
 $! age-store.py --user-secret nonexistent.age show-pubkey
 ?. stderr "not found"
 
 > Encrypted User Initialization
--- Test user initialization with encrypted key
+# Test user initialization with encrypted key
 $. age-store.py --user-secret user-secrets/encrypted-user.age.enc init-user
 $< Enter passphrase
 $> testpassword123
@@ -231,13 +231,13 @@ $> testpassword123
 ?. file "user-secrets/encrypted-user.age.enc"
 
 > Encrypted User Show Pubkey
--- Test showing pubkey with encrypted user key
+# Test showing pubkey with encrypted user key
 $. age-store.py --user-secret user-secrets/encrypted-user2.age.enc init-user
 $< Enter passphrase
 $> testpassword123
 $< Confirm passphrase
 $> testpassword123
--- Now test showing the public key
+# Now test showing the public key
 $. age-store.py --user-secret user-secrets/encrypted-user2.age.enc show-pubkey
 $< Enter passphrase
 $> testpassword123
@@ -246,35 +246,35 @@ $> testpassword123
 ?! stderr "Warning"
 
 > Encrypted User Wrong Password
--- Test error handling for wrong password
+# Test error handling for wrong password
 $. age-store.py --user-secret user-secrets/encrypted-user3.age.enc init-user
 $< Enter passphrase
 $> testpassword123
 $< Confirm passphrase
 $> testpassword123
--- Try to show pubkey with wrong password
+# Try to show pubkey with wrong password
 $! age-store.py --user-secret user-secrets/encrypted-user3.age.enc show-pubkey
 $< Enter passphrase
 $> wrongpassword
 ?. stdout "Failed to decrypt"
 
 > User Secret Extension Validation Encrypted
--- Test that encrypted secrets must end with .enc
+# Test that encrypted secrets must end with .enc
 $! age-store.py --user-secret user-secrets/bad-encrypted.age init-user
 ?. stderr ".enc"
 
 > User Secret Extension Validation Unencrypted
--- Test that unencrypted secrets must not end with .enc
+# Test that unencrypted secrets must not end with .enc
 $! age-store.py --user-secret user-secrets/bad-unencrypted.age.enc init-user --unencrypted
 ?. stderr ".enc"
 
 > Version Command
--- Test version command shows version info
+# Test version command shows version info
 $. age-store.py version
 ?. stdout "age-store"
 
 > Unencrypted Key Warning
--- Test that unencrypted keys show warning
+# Test that unencrypted keys show warning
 $. age-store.py --user-secret user-secrets/warning-test.age init-user --unencrypted
 ?. stdout "User initialization complete"
 ?. stdout "unencrypted"
@@ -287,21 +287,21 @@ $. age-store.py --user-secret user-secrets/warning-test.age init-user --unencryp
 .. Content of file 2
 :. file "test-file3.txt"
 .. Content of file 3
--- Add multiple files
+# Add multiple files
 $. age-store.py --user-secret user-secrets/user1.age add test-file1.txt
 $. age-store.py --user-secret user-secrets/user1.age add test-file2.txt
 $. age-store.py --user-secret user-secrets/user1.age add test-file3.txt
--- Test that all files show in listing
+# Test that all files show in listing
 $. age-store.py --user-secret user-secrets/user1.age ls
 ?. stdout "test-file1.txt"
 ?. stdout "test-file2.txt" 
 ?. stdout "test-file3.txt"
 
 > Migrate Encrypt User Secret
--- Test migrating unencrypted user secret to encrypted
+# Test migrating unencrypted user secret to encrypted
 $. age-store.py --user-secret user-secrets/migrate-test.age init-user --unencrypted
 ?. file "user-secrets/migrate-test.age"
--- Encrypt the user secret
+# Encrypt the user secret
 $. age-store.py --user-secret user-secrets/migrate-test.age migrate encrypt-user-secret 
 $< Enter passphrase
 $> testpassword123
@@ -310,7 +310,7 @@ $> testpassword123
 ?. stdout "Migrated"
 ?. file "user-secrets/migrate-test.age.enc"
 ?! file "user-secrets/migrate-test.age"
--- Now test show-pubkey requires password
+# Now test show-pubkey requires password
 $. age-store.py --user-secret user-secrets/migrate-test.age.enc show-pubkey
 $< Enter passphrase
 $> testpassword123
@@ -318,13 +318,13 @@ $> testpassword123
 ?! stderr "Error"
 
 > Init User Duplicate Secret Handling (unencrypted)
--- Test unencrypted init twice with default secret location
+# Test unencrypted init twice with default secret location
 $. age-store.py init-user --unencrypted
 ?. stdout "User initialization complete"
 ?. file "user-secret.age"
 $! age-store.py init-user --unencrypted
 ?. stderr "User secret already exists"
--- Test unencrypted init twice with explicit user secret
+# Test unencrypted init twice with explicit user secret
 $. age-store.py --user-secret user-secrets/duplicate-test.age init-user --unencrypted
 ?. stdout "User initialization complete"
 ?. file "user-secrets/duplicate-test.age"
@@ -333,7 +333,7 @@ $! age-store.py --user-secret user-secrets/duplicate-test.age init-user --unencr
 
 
 > Init User Duplicate Secret Handling (encrypted)
--- Test encrypted init twice with default secret location
+# Test encrypted init twice with default secret location
 $. age-store.py init-user
 $< Enter passphrase
 $> testpassword123
@@ -343,7 +343,7 @@ $> testpassword123
 ?. file "user-secret.age.enc"
 $! age-store.py init-user
 ?. stderr "User secret already exists"
--- Test encrypted init twice with explicit user secret
+# Test encrypted init twice with explicit user secret
 $. age-store.py --user-secret user-secrets/encrypted-duplicate-test.age.enc init-user
 $< Enter passphrase
 $> testpassword123

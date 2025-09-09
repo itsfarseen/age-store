@@ -90,7 +90,9 @@ def show_variable_values(values_dict):
     """Show variable values with grey indentation like command output."""
     for var_name, var_value in values_dict.items():
         print_with_left_border(
-            f'{var_name}: "{var_value}"', border_color=T.grey, text_color=T.grey
+            f'{var_name}: "{var_value}"',
+            border_color=T.grey,
+            text_color=T.grey,
         )
 
 
@@ -229,7 +231,7 @@ class Command:
     def to_str(self) -> str:
         """Reconstruct the original line excluding comments"""
         if self.type == CommandType.COMMENT:
-            return f"-- {self.comment}"
+            return f"# {self.comment}"
 
         prefix = ""
         if self.type == CommandType.SHELL:
@@ -301,7 +303,7 @@ class Parser:
                 # Parse test case or snippet
                 if line[0] == ">":
                     self.parse_stanza()
-                elif line.startswith("--"):
+                elif line.startswith("#"):
                     # Skip top-level comments
                     self.reader.consume()
                     continue
@@ -351,7 +353,7 @@ class Parser:
 
                 # Parse command
                 first_char = line[0]
-                if first_char in ["$", "?", ":", "-"]:
+                if first_char in ["$", "?", ":", "#"]:
                     commands.append(self.parse_command())
                 else:
                     # Error on unknown lines
@@ -368,8 +370,8 @@ class Parser:
         line = self.reader.consume()
 
         # Handle comments
-        if line.startswith("--"):
-            comment_text = line[2:].strip()
+        if line.startswith("#"):
+            comment_text = line[1:].strip()
             return Command(
                 type=CommandType.COMMENT,
                 token="",
@@ -381,8 +383,8 @@ class Parser:
 
         # Parse trailing comment
         comment = ""
-        if " -- " in line:
-            line, comment = line.split(" -- ", 1)
+        if " # " in line:
+            line, comment = line.split(" # ", 1)
             comment = comment.strip()
 
         # Determine command type and negation
@@ -493,7 +495,9 @@ class TestRunner:
         pass
 
     def run_all_tests(
-        self, test_suite: TestSuite, test_filter: Optional[str] = None
+        self,
+        test_suite: TestSuite,
+        test_filter: Optional[str] = None,
     ) -> bool:
         """Run all test cases from the test suite, return True if all passed"""
         passed = 0
@@ -592,7 +596,8 @@ class TestRunner:
         # Create unique test directory and change to it
         old_cwd = os.getcwd()
         self.current_test_dir = create_test_directory(
-            self.test_runs_dir, test_case.name
+            self.test_runs_dir,
+            test_case.name,
         )
 
         try:
@@ -709,7 +714,9 @@ class TestRunner:
             raise Exception(f"Executable not found: {cmd_line[0]}")
 
     def _run_pexpect_command(
-        self, command: Command, cmd_line: list[str]
+        self,
+        command: Command,
+        cmd_line: list[str],
     ) -> ExecutionResult:
         """Execute shell command with pexpect interactions and return ExecutionResult"""
         try:
