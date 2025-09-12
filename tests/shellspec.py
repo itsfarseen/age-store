@@ -10,6 +10,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 import pexpect
@@ -29,15 +30,17 @@ class T:
     )
 
 
-# Allowed executables for shell commands
-# Maps command name to actual executable path (relative to this script)
-ALLOWED_EXECUTABLES = {"age-store.py": "../age-store.py", "chmod": "chmod"}
+# Command aliases for shell commands
+# Maps command alias to actual executable path (relative to this script)
+COMMAND_ALIASES = {
+    "age-store.py": "../age-store.py",
+}
 
 # Global verbose flag
 verbose = False
 
 # Global timeout for shell commands (in seconds)
-SHELL_TIMEOUT = 30
+SHELL_TIMEOUT = 5
 
 
 def sanitize_test_name(name: str) -> str:
@@ -94,7 +97,7 @@ def show_variable_values(values_dict):
         )
 
 
-def verbose_check(description, condition, variables=None):
+def verbose_check(description, condition, variables=None, contents=None):
     """Print assertion description and result, return condition value."""
     if condition:
         print(f"{T.green}▸ {description} ✓{T.clear}")
@@ -104,6 +107,13 @@ def verbose_check(description, condition, variables=None):
     # Show variable values after if provided
     if variables:
         show_variable_values(variables)
+
+    if contents:
+        print_with_left_border(
+            contents,
+            border_color=T.grey,
+            text_color=T.grey,
+        )
 
     return condition
 
@@ -167,18 +177,27 @@ class Tokenizer:
 
         while not self.eof():
             char = self.line[self.pos]
-            if char == "\\" and self.pos + 1 < len(self.line):
-                # Escaped character
-                content += self.line[self.pos + 1]
-                self.pos += 2
+            if char == "\\":
+                self.pos += 1
+                if self.eof():
+                    # Dangling backslash
+                    content += "\\"
+                    break
+
+                next_char = self.line[self.pos]
+                if next_char == "\\" or next_char == quote_char:
+                    # Escaped backslash or quote char
+                    content += next_char
+                else:
+                    # Any other escaped char is treated literally
+                    content += "\\" + next_char
+                self.pos += 1
             elif char == quote_char:
-                # Found closing quote
                 self.pos += 1  # Skip closing quote
                 break
             else:
                 content += char
                 self.pos += 1
-
         return content
 
     def tokenize(self) -> list[str]:
@@ -426,7 +445,7 @@ class Parser:
                         )
 
                         # Treat the rest of the line as a single string
-                        content_text = pexpect_line[2:].strip()
+                        content_text = pexpect_line[3:]
                         if content_text:
                             pexpect_interactions.append((action_type, content_text))
                     else:
@@ -441,7 +460,7 @@ class Parser:
                 next_line = self.reader.peek()
                 if next_line and next_line.startswith(".."):
                     content_line = self.reader.consume()
-                    content.append(content_line[2:].strip())
+                    content.append(content_line[3:])
                 else:
                     break
             except EOFError:
@@ -478,14 +497,16 @@ class TestSuite:
 
 
 class TestRunner:
-    def __init__(self):
+    def __init__(self, spec_file_path: Optional[str] = None):
         self.last_process = None
         self.last_stdout = ""
         self.last_stderr = ""
         self.variables: dict[str, str] = {}
+        self.env_vars: dict[str, str] = {}
         self.temp_files: list[str] = []
         self.test_runs_dir = ""
         self.current_test_dir = ""
+        self.spec_file_path = spec_file_path
 
     def cleanup(self):
         """Clean up resources"""
@@ -591,6 +612,10 @@ class TestRunner:
 
     def run_test_case(self, test_case: Stanza, test_suite: TestSuite) -> bool:
         """Run a single test case, return True if passed"""
+        # Reset state for test case isolation
+        self.variables.clear()
+        self.env_vars.clear()
+
         # Create unique test directory and change to it
         old_cwd = os.getcwd()
         self.current_test_dir = create_test_directory(
@@ -625,24 +650,28 @@ class TestRunner:
 
     def _run_shell_command(self, command: Command) -> bool:
         """Execute shell command with unified diagnostic output"""
-        # Check if the command is allowed
-        if command.token not in ALLOWED_EXECUTABLES:
-            print(f"Command not allowed: {command.token}")
-            print(f"Allowed commands: {list(ALLOWED_EXECUTABLES.keys())}")
-            return False
-
-        # Get the actual executable path
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        exe_path = ALLOWED_EXECUTABLES[command.token]
+        exe_path = command.token
+        if exe_path in COMMAND_ALIASES:
+            exe_path = COMMAND_ALIASES[exe_path]
 
         if exe_path.startswith("/"):
-            # Absolute path: "/usr/bin/age"
+            # Absolute path
             executable_path = exe_path
         elif "/" in exe_path:
-            # Relative path: "../../age-store.py" or "./age"
-            executable_path = os.path.join(script_dir, exe_path)
+            # Relative path - resolve relative to spec file for direct commands, shellspec.py for aliases
+            if command.token in COMMAND_ALIASES:
+                # Alias: resolve relative to shellspec.py
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+            else:
+                # Direct command: resolve relative to spec file
+                base_dir = (
+                    os.path.dirname(self.spec_file_path)
+                    if self.spec_file_path
+                    else os.getcwd()
+                )
+            executable_path = os.path.join(base_dir, exe_path)
         else:
-            # System command: "age", "ls", "python"
+            # System command
             executable_path = exe_path
 
         # Resolve variables in command arguments
@@ -650,16 +679,20 @@ class TestRunner:
         cmd_line = [executable_path] + resolved_args
         args_str = " ".join(resolved_args)
 
+        # Create environment for subprocess
+        env = os.environ.copy()
+        env.update(self.env_vars)
+
         try:
             # Execute command based on whether it has pexpect interactions
             if command.pexpect_interactions:
                 # For pexpect commands, print in blue immediately
                 print(f"{T.blue}{command.token} {args_str}{T.clear}")
-                result = self._run_pexpect_command(command, cmd_line)
+                result = self._run_pexpect_command(command, cmd_line, env)
             else:
                 # Print the command being executed (initial yellow state)
                 print(f"{T.yellow}{command.token} {args_str}{T.clear}", end="\r")
-                result = self._run_subprocess_command(cmd_line)
+                result = self._run_subprocess_command(cmd_line, env)
                 # Determine command color based on exit code for subprocess commands
                 command_color = T.green if result.exit_code == 0 else T.red
                 print(f"{command_color}{command.token} {args_str}{T.clear}")
@@ -694,11 +727,13 @@ class TestRunner:
             print(f"  {e}")
             return False
 
-    def _run_subprocess_command(self, cmd_line: list[str]) -> ExecutionResult:
+    def _run_subprocess_command(
+        self, cmd_line: list[str], env: dict
+    ) -> ExecutionResult:
         """Execute command with subprocess and return ExecutionResult"""
         try:
             result = subprocess.run(
-                cmd_line, capture_output=True, text=True, timeout=SHELL_TIMEOUT
+                cmd_line, capture_output=True, text=True, timeout=SHELL_TIMEOUT, env=env
             )
             return ExecutionResult(
                 exit_code=result.returncode,
@@ -707,7 +742,7 @@ class TestRunner:
                 execution_type="subprocess",
             )
         except subprocess.TimeoutExpired:
-            raise Exception(f"Command timed out: {' '.join(cmd_line)}")
+            raise Exception(f"Command timed out: {" ".join(cmd_line)}")
         except FileNotFoundError:
             raise Exception(f"Executable not found: {cmd_line[0]}")
 
@@ -715,12 +750,14 @@ class TestRunner:
         self,
         command: Command,
         cmd_line: list[str],
+        env: dict,
     ) -> ExecutionResult:
         """Execute shell command with pexpect interactions and return ExecutionResult"""
-        try:
-            # Spawn the process with pexpect
-            proc = pexpect.spawn(cmd_line[0], cmd_line[1:], timeout=SHELL_TIMEOUT)
+        # Spawn the process with pexpect
+        proc = pexpect.spawn(cmd_line[0], cmd_line[1:], timeout=SHELL_TIMEOUT, env=env)
+        exception = None
 
+        try:
             # Process each pexpect interaction
             for action_type, text in command.pexpect_interactions:
                 if action_type == "expect":
@@ -737,25 +774,26 @@ class TestRunner:
             # Wait for process to complete and get output
             proc.expect(pexpect.EOF)
             proc.close()
+        except pexpect.ExceptionPexpect as e:
+            exception = e
 
+        if not exception:
             exit_code = proc.exitstatus or 0
             print_with_left_border(
                 f"exit: {exit_code}", border_color=T.grey, text_color=T.grey
             )
-
-            return ExecutionResult(
-                exit_code=exit_code,
-                stdout=proc.before.decode("utf-8") if proc.before else "",
-                stderr="",  # pexpect doesn't separate stderr
-                execution_type="pexpect",
+        else:
+            exit_code = -1024
+            print_with_left_border(
+                f"error: {exception}", border_color=T.red, text_color=T.grey
             )
 
-        except pexpect.TIMEOUT:
-            raise Exception(f"Pexpect command timed out: {' '.join(cmd_line)}")
-        except pexpect.EOF as e:
-            raise Exception(f"Pexpect: unexpected EOF: {' '.join(cmd_line)}")
-        except Exception as e:
-            raise Exception(f"Pexpect error: {e}")
+        return ExecutionResult(
+            exit_code=exit_code,
+            stdout=proc.before.decode("utf-8") if proc.before else "",
+            stderr="",  # pexpect doesn't separate stderr
+            execution_type="pexpect",
+        )
 
     def _run_assertion(self, command: Command) -> bool:
         """Run assertion command"""
@@ -779,7 +817,7 @@ class TestRunner:
         # Check for exact content (from .. lines)
         if command.content:
             expected_content = "\n".join(command.content)
-            actual_content = text.strip()
+            actual_content = text
             matches = actual_content == expected_content
 
             if command.negated:
@@ -817,53 +855,53 @@ class TestRunner:
         if not command.args:
             return False
 
-        file_path = command.args[0]
+        file_path = Path(command.args[0])
+        check_content_has = command.args[1] if len(command.args) >= 2 else None
+        check_content_exact = "\n".join(command.content)
 
-        # Check if file exists
-        exists = os.path.exists(file_path)
+        exists = file_path.exists()
+        contents = ""
+        if exists and (check_content_exact or check_content_has):
+            contents = file_path.read_text()
 
-        if len(command.args) == 1:
-            # Just checking existence
-            if command.negated:
-                msg = f"file '{file_path}' absent"
-            else:
-                msg = f"file '{file_path}' exists"
-            expected_result = not exists if command.negated else exists
-            return verbose_check(msg, expected_result)
+        # positive:
+        # - file must exist
+        # - if file_has: file must have it
+        # - if file_exact: file must equal it
+        # negative:
+        # - if file exist, it must have the content
 
-        if not exists:
-            msg = f"file '{file_path}' exists"
-            return verbose_check(msg, command.negated)
+        if not command.negated:
+            result = verbose_check(f"file '{file_path}' exists", exists)
+            if exists and check_content_has:
+                result = result and verbose_check(
+                    f"file '{file_path}' has '{check_content_has}'",
+                    contents.find(check_content_has) >= 0,
+                )
+            if exists and check_content_exact:
+                result = result and verbose_check(
+                    f"file '{file_path}' contents match",
+                    condition=(contents == check_content_exact),
+                    contents=f"File:\n{contents}\nTest:\n{check_content_exact}",
+                )
+            return result
+        else:
+            if not exists:
+                return verbose_check(f"file '{file_path}' doesn't exist", not exists)
 
-        # Check file content
-        if len(command.args) == 2:
-            search_text = command.args[1]
-            with open(file_path, "r") as f:
-                content = f.read()
-            found = search_text in content
-
-            if command.negated:
-                msg = f"file '{file_path}' lacks '{search_text}'"
-            else:
-                msg = f"file '{file_path}' has '{search_text}'"
-            expected_result = not found if command.negated else found
-            return verbose_check(msg, expected_result)
-
-        # Check exact content (from .. lines)
-        if command.content:
-            expected_content = "\n".join(command.content)
-            with open(file_path, "r") as f:
-                actual_content = f.read().strip()
-            matches = actual_content == expected_content
-
-            if command.negated:
-                msg = f"file '{file_path}' differs"
-            else:
-                msg = f"file '{file_path}' matches exactly"
-            expected_result = not matches if command.negated else matches
-            return verbose_check(msg, expected_result)
-
-        return True
+            result = True
+            if check_content_has:
+                result = verbose_check(
+                    f"file '{file_path}' lacks '{check_content_has}'",
+                    contents.find(check_content_has) < 0,
+                )
+            if check_content_exact:
+                result = result and verbose_check(
+                    f"file '{file_path}' contents don't match",
+                    condition=(contents != check_content_exact),
+                    contents=f"File:\n{contents}\nTest:\n{check_content_exact}",
+                )
+            return result
 
     def _assert_comparison(self, command: Command) -> bool:
         """Handle comparison assertions"""
@@ -939,6 +977,8 @@ class TestRunner:
             return self._store_variable(command, self.last_stdout)
         elif command.token == "stderr":
             return self._store_variable(command, self.last_stderr)
+        elif command.token == "env":
+            return self._set_env_var(command)
         elif command.token == "@":
             # Invoke snippet
             if not command.args:
@@ -973,6 +1013,23 @@ class TestRunner:
         except Exception as e:
             print(f"Failed to create file {file_path}: {e}")
             return False
+
+    def _set_env_var(self, command: Command) -> bool:
+        """Set environment variable for subsequent shell commands in the test"""
+        if len(command.args) < 2:
+            print(f"Action 'env' requires 2 arguments, but got {len(command.args)}")
+            return False
+
+        var_name = command.args[0]
+        value_arg = command.args[1]
+
+        value = self._resolve_value(value_arg)
+        self.env_vars[var_name] = value
+
+        if verbose:
+            print(f"{T.green}▸ set env {var_name}='{value}' ✓{T.clear}")
+
+        return True
 
     def _store_variable(self, command: Command, value: str) -> bool:
         """Store value in variable"""
@@ -1037,7 +1094,7 @@ def main():
     try:
         dsl_parser = Parser(content)
         test_suite = dsl_parser.parse()
-        runner = TestRunner()
+        runner = TestRunner(os.path.abspath(test_file))
         success = runner.run_all_tests(test_suite, test_filter=args.test)
     except ValueError as e:
         print(f"Parse error: {e}")

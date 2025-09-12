@@ -305,7 +305,7 @@ $. age-store.py --user-secret user-secrets/migrate-test.age init-user --unencryp
 $. age-store.py --user-secret user-secrets/migrate-test.age migrate encrypt-user-secret 
 $< Enter passphrase
 $> testpassword123
-$< Confirm passphrase  
+$< Confirm passphrase
 $> testpassword123
 ?. stdout "Migrated"
 ?. file "user-secrets/migrate-test.age.enc"
@@ -420,6 +420,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell test.env --shell 
 ?. stdout
 .. secret_value_1
 .. secret_value_2
+..
 
 > Env Shell With Hook
 :. @ setup_store
@@ -449,6 +450,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook .
 .. hook_value
 .. secret_value_1_secret_value_2
 .. 2
+..
 
 > Env Shell Hook Error Exit Code
 :. @ setup_store
@@ -503,4 +505,5 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook .
 .. secret_value_1
 .. valid_value
 .. another_value
+..
 ?. stderr "Warning: Hook output line ignored"
