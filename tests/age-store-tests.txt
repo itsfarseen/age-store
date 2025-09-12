@@ -576,3 +576,14 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 ?. stdout "(cli-prompt)"
 ?! stdout "(hook-env)"
 ?! stdout "(age-store:prompt-test)"
+
+> Env Shell AGE_STORE_ENV Variable
+:. @ setup_store
+# Create environment file for testing AGE_STORE_ENV
+:. file "test-env-var.env"
+.. # Test env file for AGE_STORE_ENV
+# Test that AGE_STORE_ENV is set to the env file path
+$. age-store.py --user-secret user-secrets/user1.age env-shell test-env-var.env --shell /bin/bash -- -c 'printenv AGE_STORE_ENV'
+?. stdout 
+.. test-env-var.env
+..

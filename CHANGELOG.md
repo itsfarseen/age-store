@@ -7,6 +7,7 @@
 - Add `--no-prompt` option to `env-shell` command to disable prompt modification
 - Add `--custom-prompt` option to `env-shell` command to specify custom prompt prefix
 - Add `AGE_STORE_PROMPT` environment variable support - hook scripts can set this to customize the prompt (CLI `--custom-prompt` takes precedence)
+- Add `AGE_STORE_ENV` environment variable to `env-shell` command - set to the path of the loaded .env file
 
 ## 0.4 (2025-09-13)
 

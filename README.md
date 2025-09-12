@@ -104,22 +104,41 @@ alice$ ./age-store.py view shared-config.json
   -- 45 .env
   DATABASE_URL=postgresql://user:pass@localhost/db
   ```
-- `env-shell <env_file> [--shell <shell>] [--hook <script>] [-- <args>...]` - Launch shell with environment variables loaded from secrets
+- `env-shell <env_file> [options] [-- <args>...]` - Launch shell with environment variables loaded from secrets
   ```
   # Create env file mapping variables to secret files
   $ echo "API_KEY=api-key.txt" > app.env
   $ echo "DB_PASSWORD=db-pass.txt" >> app.env
   
-  # Launch shell with secrets as environment variables
+  # Launch shell with secrets as environment variables (shows prompt)
   $ ./age-store.py env-shell app.env
+  (age-store:app) user@host:~$ echo $API_KEY
   
   # Use custom shell and pass arguments
   $ ./age-store.py env-shell app.env --shell /bin/zsh -- -c 'echo $API_KEY'
   
-  # Use hook script for additional environment variables
-  $ echo '#!/bin/bash\necho "COMPUTED_VAR=computed_value"' > hook.sh && chmod +x hook.sh
+  # Disable prompt modification
+  $ ./age-store.py env-shell app.env --no-prompt
+  
+  # Use custom prompt prefix
+  $ ./age-store.py env-shell app.env --custom-prompt "my-app"
+  (my-app) user@host:~$ 
+  
+  # Use hook script for additional environment variables (can set AGE_STORE_PROMPT)
+  $ echo '#!/bin/bash\necho "COMPUTED_VAR=computed_value"\necho "AGE_STORE_PROMPT=prod-env"' > hook.sh && chmod +x hook.sh
   $ ./age-store.py env-shell app.env --hook ./hook.sh
+  (prod-env) user@host:~$ echo $COMPUTED_VAR $AGE_STORE_ENV
   ```
+  
+  **Shell Prompt Options:**
+  - By default, modifies shell prompt to show environment name: `(age-store:<env-file>) user@host:~$`
+  - `--no-prompt`: Disable prompt modification
+  - `--custom-prompt <text>`: Use custom prompt prefix instead of default
+  - Hook scripts can set `AGE_STORE_PROMPT` environment variable (CLI `--custom-prompt` takes precedence)
+  
+  **Available Environment Variables:**
+  - `AGE_STORE_ENV`: Set to the path of the loaded .env file
+  - `AGE_STORE_PROMPT`: Can be set by hook scripts to customize prompt (overridden by `--custom-prompt`)
 - `ls` - List all available encrypted files
 
 ### Team Management (Admin)

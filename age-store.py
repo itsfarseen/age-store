@@ -833,6 +833,9 @@ def cmd_env_shell(
     new_env = os.environ.copy()
     new_env.update(env_vars)
 
+    # Add AGE_STORE_ENV variable pointing to the env file
+    new_env["AGE_STORE_ENV"] = env_file_path
+
     # Determine prompt to use (CLI custom prompt has highest precedence)
     prompt_text = None
     if not no_prompt:
