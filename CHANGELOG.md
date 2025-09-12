@@ -2,6 +2,12 @@
 
 ## (Unreleased)
 
+**New features**
+- Add shell prompt modification to `env-shell` command - now shows environment name in shell prompt by default
+- Add `--no-prompt` option to `env-shell` command to disable prompt modification
+- Add `--custom-prompt` option to `env-shell` command to specify custom prompt prefix
+- Add `AGE_STORE_PROMPT` environment variable support - hook scripts can set this to customize the prompt (CLI `--custom-prompt` takes precedence)
+
 ## 0.4 (2025-09-13)
 
 **New features**

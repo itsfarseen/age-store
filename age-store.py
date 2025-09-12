@@ -650,8 +650,80 @@ def cmd_list_store():
         eprint("No secrets found")
 
 
+def launch_shell_with_prompt(
+    shell: str, prompt: str = None, args: list[str] = None, env: dict = None
+):
+    """Launch shell with optionally modified prompt.
+
+    Args:
+        shell: Path to shell executable
+        prompt: Prompt text to display (without parentheses). If None, no prompt modification.
+        args: Additional arguments to pass to shell
+        env: Environment variables dict
+    """
+    shell_basename = os.path.basename(shell)
+    shell_args = args or []
+    shell_env = env or os.environ.copy()
+
+    if prompt is None:
+        # No prompt modification - launch shell directly
+        cmd_args = [shell] + shell_args
+        try:
+            os.execve(shell, cmd_args, shell_env)
+        except OSError as e:
+            eprint(f"Error: Failed to launch shell {shell}: {e}")
+            sys.exit(1)
+
+    # Prompt modification requested
+    env_name = f"({prompt})"
+
+    if shell_basename in ["bash", "zsh"]:
+        # Use -c to set up environment and exec the shell
+        shell_args_str = " ".join(f'"{arg}"' for arg in shell_args)
+        cmd_script = f"""
+[ -f ~/.{shell_basename}rc ] && source ~/.{shell_basename}rc
+export PS1="{env_name} $PS1"
+exec {shell} {shell_args_str}
+"""
+        try:
+            os.execve(shell, [shell, "-c", cmd_script], shell_env)
+        except OSError as e:
+            eprint(f"Error: Failed to launch shell {shell}: {e}")
+            sys.exit(1)
+
+    elif shell_basename == "fish":
+        # Use --init-command for fish
+        init_command = f"""functions --copy fish_prompt fish_prompt_user
+function fish_prompt
+    fish_prompt_user
+    echo -n '{env_name} '
+end"""
+        cmd_args = [shell, "--init-command", init_command] + shell_args
+
+        try:
+            os.execve(shell, cmd_args, shell_env)
+        except OSError as e:
+            eprint(f"Error: Failed to launch shell {shell}: {e}")
+            sys.exit(1)
+    else:
+        # Unsupported shell, fall back to no prompt modification
+        eprint(f"Warning: Shell {shell_basename} prompt modification not supported")
+        cmd_args = [shell] + shell_args
+
+        try:
+            os.execve(shell, cmd_args, shell_env)
+        except OSError as e:
+            eprint(f"Error: Failed to launch shell {shell}: {e}")
+            sys.exit(1)
+
+
 def cmd_env_shell(
-    env_file_path: str, shell: str = None, args: list[str] = None, hook: str = None
+    env_file_path: str,
+    shell: str = None,
+    args: list[str] = None,
+    hook: str = None,
+    no_prompt: bool = False,
+    custom_prompt: str = None,
 ):
     """Launch shell with environment variables loaded from secrets."""
     env_file = Path(env_file_path)
@@ -757,12 +829,22 @@ def cmd_env_shell(
     # Determine shell to use
     user_shell = shell or os.environ.get("SHELL", "/bin/sh")
 
-    # Prepare command arguments
-    shell_args = [user_shell] + (args or [])
-
     # Prepare environment with loaded secrets
     new_env = os.environ.copy()
     new_env.update(env_vars)
+
+    # Determine prompt to use (CLI custom prompt has highest precedence)
+    prompt_text = None
+    if not no_prompt:
+        if custom_prompt:
+            # CLI custom prompt (highest precedence)
+            prompt_text = custom_prompt
+        elif "AGE_STORE_PROMPT" in env_vars:
+            # Hook output prompt
+            prompt_text = env_vars["AGE_STORE_PROMPT"]
+        else:
+            # Default prompt
+            prompt_text = f"age-store:{env_file.stem}"
 
     print(
         f"Launching {user_shell} with {len(env_vars)} environment variables from secrets..."
@@ -770,12 +852,8 @@ def cmd_env_shell(
     if args:
         print(f"Shell arguments: {' '.join(args)}")
 
-    # Launch shell with new environment
-    try:
-        os.execve(user_shell, shell_args, new_env)
-    except OSError as e:
-        eprint(f"Error: Failed to launch shell {user_shell}: {e}")
-        sys.exit(1)
+    # Launch shell with optional prompt modification
+    launch_shell_with_prompt(user_shell, prompt_text, args, new_env)
 
 
 def cmd_doctor():
@@ -1005,6 +1083,15 @@ def main():
         "--hook",
         help="Executable that outputs additional FOO=BAR environment variables to stdout",
     )
+    env_shell_parser.add_argument(
+        "--no-prompt",
+        action="store_true",
+        help="Don't modify shell prompt to show environment name",
+    )
+    env_shell_parser.add_argument(
+        "--custom-prompt",
+        help="Custom prompt prefix to use instead of default 'age-store:<env-file>'",
+    )
 
     # Add file command
     add_file_parser = subparsers.add_parser(
@@ -1103,7 +1190,14 @@ def main():
         elif args.command == "bundle":
             cmd_bundle_files(args.files)
         elif args.command == "env-shell":
-            cmd_env_shell(args.env_file, args.shell, args.args, args.hook)
+            cmd_env_shell(
+                args.env_file,
+                args.shell,
+                args.args,
+                args.hook,
+                args.no_prompt,
+                args.custom_prompt,
+            )
         elif args.command == "ls":
             cmd_list_store()
         elif args.command == "init-user":
