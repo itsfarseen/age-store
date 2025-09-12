@@ -2,6 +2,8 @@
 
 ## (Unreleased)
 
+## 0.5 (2025-09-13)
+
 **New features**
 - Add shell prompt modification to `env-shell` command - now shows environment name in shell prompt by default
 - Add `--no-prompt` option to `env-shell` command to disable prompt modification
