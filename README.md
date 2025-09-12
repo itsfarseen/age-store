@@ -1,5 +1,8 @@
 # Age Store
 
+[![CI/CD](https://github.com/itsfarseen/age-store/actions/workflows/ci.yml/badge.svg)](https://github.com/itsfarseen/age-store/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/itsfarseen/age-store)](https://github.com/itsfarseen/age-store/releases/latest)
+
 > **📋 See [CHANGELOG.md](CHANGELOG.md) for version history and migration instructions**
 
 A simple, secure secret management system built on the proven [age encryption](https://age-encryption.org/) standard. Age Store makes it easy to share encrypted files across teams using familiar command-line tools.

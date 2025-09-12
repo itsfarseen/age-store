@@ -1,0 +1,124 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Run Tests
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y age
+        pip install pexpect
+        
+    - name: Run tests
+      run: make -C tests
+      
+    - name: Check version consistency and create release
+      if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push'
+      run: |
+        python3 << 'EOF'
+        import subprocess
+        import re
+        import sys
+        import os
+        
+        def run_cmd(cmd_args):
+            result = subprocess.run(cmd_args, capture_output=True, text=True)
+            return result.stdout.strip(), result.stderr.strip(), result.returncode
+        
+        # Extract version from age-store.py output
+        version_output, _, _ = run_cmd(["./age-store.py", "version"])
+        version_match = re.search(r'v(\d+\.\d+)', version_output)
+        if not version_match:
+            print("❌ Could not extract version from age-store.py output")
+            sys.exit(1)
+        version = version_match.group(1)
+        print(f"Detected version: {version}")
+        
+        # Extract latest version from CHANGELOG.md (skip "Unreleased" section)
+        with open('CHANGELOG.md', 'r') as f:
+            changelog = f.read()
+        
+        changelog_match = re.search(r'^## (\d+\.\d+)', changelog, re.MULTILINE)
+        if not changelog_match:
+            print("❌ Could not find version in CHANGELOG.md")
+            sys.exit(1)
+        changelog_version = changelog_match.group(1)
+        print(f"Changelog version: {changelog_version}")
+        
+        # Check if git tag exists for this version
+        _, _, tag_returncode = run_cmd(["git", "rev-parse", f"v{version}"])
+        git_tag_exists = tag_returncode == 0
+        print(f"Git tag v{version} exists: {git_tag_exists}")
+        
+        # Check version consistency
+        if version != changelog_version or not git_tag_exists:
+            print("❌ Version mismatch or missing git tag:")
+            print(f"  - age-store.py version: {version}")
+            print(f"  - CHANGELOG.md version: {changelog_version}")
+            print(f"  - Git tag v{version} exists: {git_tag_exists}")
+            print("Skipping release creation.")
+            sys.exit(0)
+        
+        print(f"✅ Version consistency check passed: {version}")
+        
+        # Check if GitHub release already exists
+        _, _, release_returncode = run_cmd(["gh", "release", "view", f"v{version}"])
+        release_exists = release_returncode == 0
+        
+        if release_exists:
+            print(f"ℹ️ GitHub release v{version} already exists, skipping creation")
+            sys.exit(0)
+        
+        print("Creating release artifact...")
+        
+        # Extract release notes from changelog
+        lines = changelog.split('\n')
+        in_version_section = False
+        release_notes = []
+        
+        for line in lines:
+            if line.startswith(f"## {version} "):
+                in_version_section = True
+                continue
+            elif line.startswith("## ") and in_version_section:
+                break
+            elif in_version_section and line.strip():
+                release_notes.append(line)
+        
+        notes_text = '\n'.join(release_notes).strip()
+        
+        # Create release using gh CLI
+        cmd_args = ["gh", "release", "create", f"v{version}", 
+                   "--title", f"age-store v{version}",
+                   "--notes", notes_text,
+                   "./age-store.py"]
+        _, stderr, returncode = run_cmd(cmd_args)
+        
+        if returncode == 0:
+            print(f"✅ Release v{version} created successfully")
+        else:
+            print(f"❌ Failed to create release: {stderr}")
+            sys.exit(1)
+        EOF
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
