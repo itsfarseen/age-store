@@ -514,7 +514,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook .
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with default prompt in bash
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --shell /bin/bash -- -ic 'echo PS1 \$PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --shell /bin/bash -- -ic 'printenv PS1'
 ?. stdout "(age-store:prompt-test)"
 
 > Env Shell Default Prompt Fish
@@ -523,7 +523,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with default prompt in fish
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --shell /usr/bin/fish -- -c 'fish_prompt'
+$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --shell /usr/bin/fish -- -c fish_prompt
 ?. stdout "(age-store:prompt-test)"
 
 > Env Shell No Prompt
@@ -532,8 +532,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with --no-prompt option
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --no-prompt --shell /bin/bash -- -ic 'echo PS1 \$PS1'
-?. stdout "PS1"
+$! age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --no-prompt --shell /bin/bash -- -ic 'printenv PS1'
 ?! stdout "(age-store:prompt-test)"
 
 > Env Shell Custom Prompt
@@ -542,7 +541,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with custom prompt
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --custom-prompt "myapp" --shell /bin/bash -- -ic 'echo PS1: \$PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --custom-prompt "myapp" --shell /bin/bash -- -ic 'printenv PS1'
 ?. stdout "(myapp)"
 ?! stdout "(age-store:prompt-test)"
 
@@ -557,7 +556,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 .. echo "AGE_STORE_PROMPT=hook-env"
 $. chmod +x "prompt-hook.sh"
 # Test env-shell with AGE_STORE_PROMPT from hook
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --hook ./prompt-hook.sh --shell /bin/bash -- -ic 'echo PS1: \$PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --hook ./prompt-hook.sh --shell /bin/bash -- -ic 'printenv PS1'
 ?. stdout "(hook-env)"
 ?! stdout "(age-store:prompt-test)"
 
@@ -572,7 +571,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 .. echo "AGE_STORE_PROMPT=hook-env"
 $. chmod +x "prompt-hook2.sh"
 # Test that --custom-prompt overrides AGE_STORE_PROMPT from hook (CLI has highest precedence)
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --custom-prompt "cli-prompt" --hook ./prompt-hook2.sh --shell /bin/bash -- -ic 'echo PS1: \$PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --custom-prompt "cli-prompt" --hook ./prompt-hook2.sh --shell /bin/bash -- -ic 'printenv PS1'
 ?. stdout "(cli-prompt)"
 ?! stdout "(hook-env)"
 ?! stdout "(age-store:prompt-test)"
