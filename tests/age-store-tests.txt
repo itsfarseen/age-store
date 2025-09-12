@@ -420,3 +420,87 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell test.env --shell 
 ?. stdout
 .. secret_value_1
 .. secret_value_2
+
+> Env Shell With Hook
+:. @ setup_store
+# Create env file and secrets for testing
+:. file "secret1.txt"
+.. secret_value_1
+:. file "secret2.txt"
+.. secret_value_2
+$. age-store.py --user-secret user-secrets/user1.age add secret1.txt
+$. age-store.py --user-secret user-secrets/user1.age add secret2.txt
+# Create environment file
+:. file "test.env"
+.. FOO=secret1.txt
+.. BAR=secret2.txt
+# Create hook script that computes values from existing secrets
+:. file "test-hook.sh"
+.. #!/bin/sh
+.. echo "HOOK_VAR=hook_value"
+.. echo "COMBINED_SECRETS=${FOO}_${BAR}"
+.. echo "SECRET_COUNT=$(echo "$FOO $BAR" | wc -w)"
+$. chmod +x "test-hook.sh"
+# Test env-shell with hook that computes values from existing secrets
+$. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./test-hook.sh --shell /bin/sh -- -c 'printenv FOO BAR HOOK_VAR COMBINED_SECRETS SECRET_COUNT'
+?. stdout
+.. secret_value_1
+.. secret_value_2
+.. hook_value
+.. secret_value_1_secret_value_2
+.. 2
+
+> Env Shell Hook Error Exit Code
+:. @ setup_store
+# Create env file and secrets
+:. file "secret1.txt"
+.. secret_value_1
+$. age-store.py --user-secret user-secrets/user1.age add secret1.txt
+:. file "test.env"
+.. FOO=secret1.txt
+# Create hook script that exits with error
+:. file "failing-hook.sh"
+.. #!/bin/sh
+.. echo "This should not appear"
+.. exit 1
+$. chmod +x "failing-hook.sh"
+# Test that hook failure causes env-shell to fail
+$! age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./failing-hook.sh
+?. stderr "Hook script exited with code 1"
+
+> Env Shell Hook Nonexistent Script
+:. @ setup_store
+# Create basic env file
+:. file "secret1.txt"
+.. secret_value_1
+$. age-store.py --user-secret user-secrets/user1.age add secret1.txt
+:. file "test.env"
+.. FOO=secret1.txt
+# Test with nonexistent hook script
+$! age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./nonexistent-hook.sh
+?. stderr "Hook script not found"
+
+> Env Shell Hook Invalid Output Format
+:. @ setup_store
+# Create basic env file
+:. file "secret1.txt"
+.. secret_value_1
+$. age-store.py --user-secret user-secrets/user1.age add secret1.txt
+:. file "test.env"
+.. FOO=secret1.txt
+# Create hook script with invalid output format
+:. file "invalid-hook.sh"
+.. #!/bin/sh
+.. echo "VALID_VAR=valid_value"
+.. echo "invalid_line_no_equals"
+.. echo "ANOTHER_VALID=another_value"
+.. echo ""
+.. echo "=empty_name"
+$. chmod +x "invalid-hook.sh"
+# Test that hook with invalid lines still works for valid lines
+$. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./invalid-hook.sh --shell /bin/sh -- -c 'printenv FOO VALID_VAR ANOTHER_VALID'
+?. stdout
+.. secret_value_1
+.. valid_value
+.. another_value
+?. stderr "Warning: Hook output line ignored"

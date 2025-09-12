@@ -2,6 +2,9 @@
 
 ## (Unreleased)
 
+**New features**
+- Add `--hook` option to `env-shell` command to execute scripts that output additional environment variables in `FOO=BAR` format
+
 ## 0.3 (2025-09-09)
 
 **New features**

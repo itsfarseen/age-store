@@ -101,7 +101,7 @@ alice$ ./age-store.py view shared-config.json
   -- 45 .env
   DATABASE_URL=postgresql://user:pass@localhost/db
   ```
-- `env-shell <env_file> [--shell <shell>] [-- <args>...]` - Launch shell with environment variables loaded from secrets
+- `env-shell <env_file> [--shell <shell>] [--hook <script>] [-- <args>...]` - Launch shell with environment variables loaded from secrets
   ```
   # Create env file mapping variables to secret files
   $ echo "API_KEY=api-key.txt" > app.env
@@ -112,6 +112,10 @@ alice$ ./age-store.py view shared-config.json
   
   # Use custom shell and pass arguments
   $ ./age-store.py env-shell app.env --shell /bin/zsh -- -c 'echo $API_KEY'
+  
+  # Use hook script for additional environment variables
+  $ echo '#!/bin/bash\necho "COMPUTED_VAR=computed_value"' > hook.sh && chmod +x hook.sh
+  $ ./age-store.py env-shell app.env --hook ./hook.sh
   ```
 - `ls` - List all available encrypted files
 

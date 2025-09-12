@@ -650,70 +650,126 @@ def cmd_list_store():
         eprint("No secrets found")
 
 
-def cmd_env_shell(env_file_path: str, shell: str = None, args: list[str] = None):
+def cmd_env_shell(
+    env_file_path: str, shell: str = None, args: list[str] = None, hook: str = None
+):
     """Launch shell with environment variables loaded from secrets."""
     env_file = Path(env_file_path)
-    
+
     if not env_file.exists():
         eprint(f"Error: Environment file {env_file} not found")
         sys.exit(1)
-    
+
     # Get master private key to access secrets
     master_private_key = get_master_private_key()
-    
+
     # Parse environment file and collect secrets
     env_vars = {}
     try:
-        with open(env_file, 'r') as f:
+        with open(env_file, "r") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
-                    
-                if '=' not in line:
+
+                if "=" not in line:
                     eprint(f"Error: Invalid format at line {line_num}: {line}")
                     eprint("Expected format: VAR_NAME=secret-name")
                     sys.exit(1)
-                
-                var_name, secret_name = line.split('=', 1)
+
+                var_name, secret_name = line.split("=", 1)
                 var_name = var_name.strip()
                 secret_name = secret_name.strip()
-                
+
                 if not var_name or not secret_name:
-                    eprint(f"Error: Empty variable or secret name at line {line_num}: {line}")
+                    eprint(
+                        f"Error: Empty variable or secret name at line {line_num}: {line}"
+                    )
                     sys.exit(1)
-                
+
                 # Load secret content
                 secret_file = STORE_DIR / f"{secret_name}.enc"
                 if not secret_file.exists():
-                    eprint(f"Error: Secret file {secret_file} not found for variable {var_name}")
+                    eprint(
+                        f"Error: Secret file {secret_file} not found for variable {var_name}"
+                    )
                     sys.exit(1)
-                
+
                 try:
-                    content = age_decrypt_file_with_identity(secret_file, master_private_key)
+                    content = age_decrypt_file_with_identity(
+                        secret_file, master_private_key
+                    )
                     env_vars[var_name] = content.decode().strip()
                 except RuntimeError as e:
-                    eprint(f"Error: Failed to decrypt {secret_name} for {var_name}: {e}")
+                    eprint(
+                        f"Error: Failed to decrypt {secret_name} for {var_name}: {e}"
+                    )
                     sys.exit(1)
-    
+
     except IOError as e:
         eprint(f"Error: Cannot read environment file {env_file}: {e}")
         sys.exit(1)
-    
+
+    # Execute hook if provided
+    if hook:
+        try:
+            # Execute hook with current environment + loaded secrets
+            hook_env = os.environ.copy()
+            hook_env.update(env_vars)
+
+            result = subprocess.run(
+                [hook], stdout=subprocess.PIPE, text=True, env=hook_env
+            )
+
+            if result.returncode != 0:
+                eprint(f"Error: Hook script exited with code {result.returncode}")
+                sys.exit(1)
+
+            # Parse hook output for additional environment variables
+            for line in result.stdout.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+
+                if "=" not in line:
+                    eprint(f"Warning: Hook output line ignored (no '='): {line}")
+                    continue
+
+                var_name, var_value = line.split("=", 1)
+                var_name = var_name.strip()
+                var_value = var_value.strip()
+
+                if not var_name:
+                    eprint(
+                        f"Warning: Hook output line ignored (empty variable name): {line}"
+                    )
+                    continue
+
+                env_vars[var_name] = var_value
+
+        except FileNotFoundError:
+            eprint(f"Error: Hook script not found: {hook}")
+            sys.exit(1)
+        except OSError as e:
+            eprint(f"Error: Failed to execute hook script: {e}")
+            sys.exit(1)
+
     # Determine shell to use
-    user_shell = shell or os.environ.get('SHELL', '/bin/sh')
-    
+    user_shell = shell or os.environ.get("SHELL", "/bin/sh")
+
     # Prepare command arguments
     shell_args = [user_shell] + (args or [])
-    
+
     # Prepare environment with loaded secrets
     new_env = os.environ.copy()
     new_env.update(env_vars)
-    
-    print(f"Launching {user_shell} with {len(env_vars)} environment variables from secrets...")
+
+    print(
+        f"Launching {user_shell} with {len(env_vars)} environment variables from secrets..."
+    )
     if args:
         print(f"Shell arguments: {' '.join(args)}")
-    
+
     # Launch shell with new environment
     try:
         os.execve(user_shell, shell_args, new_env)
@@ -936,13 +992,18 @@ def main():
         "env-shell", help="Launch shell with environment variables from secrets"
     )
     env_shell_parser.add_argument(
-        "env_file", help="Environment file with VAR=secret-name pairs"
+        "env_file",
+        help="Environment file with VAR_NAME=secret-name pairs (one per line, # for comments)",
     )
     env_shell_parser.add_argument(
         "--shell", help="Custom shell to launch (default: $SHELL or /bin/sh)"
     )
     env_shell_parser.add_argument(
         "args", nargs="*", help="Arguments to pass to the shell (use -- to separate)"
+    )
+    env_shell_parser.add_argument(
+        "--hook",
+        help="Executable that outputs additional FOO=BAR environment variables to stdout",
     )
 
     # Add file command
@@ -1042,7 +1103,7 @@ def main():
         elif args.command == "bundle":
             cmd_bundle_files(args.files)
         elif args.command == "env-shell":
-            cmd_env_shell(args.env_file, args.shell, args.args)
+            cmd_env_shell(args.env_file, args.shell, args.args, args.hook)
         elif args.command == "ls":
             cmd_list_store()
         elif args.command == "init-user":

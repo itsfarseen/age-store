@@ -31,9 +31,7 @@ class T:
 
 # Allowed executables for shell commands
 # Maps command name to actual executable path (relative to this script)
-ALLOWED_EXECUTABLES = {
-    "age-store.py": "../age-store.py",
-}
+ALLOWED_EXECUTABLES = {"age-store.py": "../age-store.py", "chmod": "chmod"}
 
 # Global verbose flag
 verbose = False
