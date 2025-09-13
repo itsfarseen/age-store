@@ -742,7 +742,7 @@ class TestRunner:
                 execution_type="subprocess",
             )
         except subprocess.TimeoutExpired:
-            raise Exception(f"Command timed out: {" ".join(cmd_line)}")
+            raise Exception(f'Command timed out: {" ".join(cmd_line)}')
         except FileNotFoundError:
             raise Exception(f"Executable not found: {cmd_line[0]}")
 
