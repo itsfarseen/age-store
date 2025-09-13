@@ -1,0 +1,9 @@
+FROM alpine:latest
+
+# Install dependencies needed for CI tests
+RUN apk add --no-cache make age bash fish python3 py3-pexpect
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -194,6 +194,30 @@ MASTER_KEY_FILE = Path("master-key.age.enc")
 
 Simply edit these paths in the script to customize file locations for your project structure.
 
+## Testing
+
+Age Store includes a comprehensive test suite using shellspec:
+
+```bash
+# Run all tests
+make -C tests
+
+# Run specific test
+make -C tests test-filter TEST="test name"
+
+# Docker tests across different distributions
+make -C tests/docker ubuntu    # Test on Ubuntu
+make -C tests/docker arch      # Test on Arch Linux  
+make -C tests/docker alpine    # Test on Alpine Linux
+make -C tests/docker all       # Test on all distributions
+
+# Filter docker tests by name
+make -C tests/docker ubuntu TEST_FILTER="test name"
+make -C tests/docker all TEST_FILTER="test name"
+```
+
+The test suite validates all functionality across multiple Linux distributions to ensure compatibility.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

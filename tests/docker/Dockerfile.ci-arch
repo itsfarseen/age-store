@@ -1,0 +1,10 @@
+FROM archlinux:latest
+
+# Install dependencies needed for CI tests
+RUN pacman -Sy --noconfirm make age bash fish python python-pexpect && \
+    pacman -Scc --noconfirm
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
