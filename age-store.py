@@ -681,9 +681,14 @@ def launch_shell_with_prompt(
         # Use -c to set up environment and exec the shell
         shell_args_str = " ".join(f'"{arg}"' for arg in shell_args)
         cmd_script = f"""
+exec {shell} --rcfile <(cat <<'EOF'
+# Source the normal rcfile first
 [ -f ~/.{shell_basename}rc ] && source ~/.{shell_basename}rc
+
+# Then override PS1
 export PS1="{env_name} $PS1"
-exec {shell} {shell_args_str}
+EOF
+) {shell_args_str}
 """
         try:
             os.execve(shell, [shell, "-c", cmd_script], shell_env)
