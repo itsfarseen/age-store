@@ -2,6 +2,8 @@
 
 ## (Unreleased)
 
+## 0.6 (2025-09-13)
+
 **Bug fixes**
 - Fix shell prompt not being inherited properly in bash/zsh environments
 - Document argparse bug in ubuntu 22.04 and 24.04. See KNOWN_ISSUES.md.
