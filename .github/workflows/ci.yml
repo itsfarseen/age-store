@@ -11,26 +11,53 @@ permissions:
   contents: write
 
 jobs:
-  test:
+  test-ubuntu-22:
     runs-on: ubuntu-latest
-    name: Run Tests
+    name: Test on Ubuntu 22.04 (Docker)
     
     steps:
     - uses: actions/checkout@v4
       
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-        
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y age bash fish
-        pip install pexpect
-        
-    - name: Run tests
-      run: make -C tests
+    - name: Run Ubuntu 22.04 tests
+      run: make -C tests/docker ubuntu-22
+
+  test-ubuntu-24:
+    runs-on: ubuntu-latest
+    name: Test on Ubuntu 24.04 (Docker)
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Run Ubuntu 24.04 tests
+      run: make -C tests/docker ubuntu-24
+
+  test-archlinux:
+    runs-on: ubuntu-latest
+    name: Test on ArchLinux (Docker)
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Run ArchLinux tests
+      run: make -C tests/docker arch
+
+  test-alpine:
+    runs-on: ubuntu-latest
+    name: Test on Alpine Linux (Docker)
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Run Alpine tests
+      run: make -C tests/docker alpine
+
+  release:
+    runs-on: ubuntu-latest
+    name: Create Release
+    needs: [test-ubuntu-22, test-ubuntu-24, test-archlinux, test-alpine]
+    
+    steps:
+    - uses: actions/checkout@v4
       
     - name: Check version consistency and create release
       if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push'

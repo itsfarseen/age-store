@@ -3,16 +3,25 @@
 REPO_ROOT := $(shell git rev-parse --show-toplevel)
 TEST_FILTER ?=
 
-.PHONY: ubuntu arch alpine all
+.PHONY: ubuntu-22 ubuntu-24 arch alpine all
 
-ubuntu:
-	@echo "=== Building Ubuntu CI Docker image ==="
-	docker build -f Dockerfile.ci -t age-store-ci-ubuntu .
-	@echo "=== Running tests in Ubuntu Docker ==="
+ubuntu-22:
+	@echo "=== Building Ubuntu 22.04 CI Docker image ==="
+	docker build -f Dockerfile.ci-ubuntu22 -t age-store-ci-ubuntu22 .
+	@echo "=== Running tests in Ubuntu 22.04 Docker ==="
 	docker run --rm -it \
 		-v "$(REPO_ROOT):/workspace:ro" \
 		-e TEST_FILTER="$(TEST_FILTER)" \
-		age-store-ci-ubuntu
+		age-store-ci-ubuntu22
+
+ubuntu-24:
+	@echo "=== Building Ubuntu 24.04 CI Docker image ==="
+	docker build -f Dockerfile.ci-ubuntu24 -t age-store-ci-ubuntu24 .
+	@echo "=== Running tests in Ubuntu 24.04 Docker ==="
+	docker run --rm -it \
+		-v "$(REPO_ROOT):/workspace:ro" \
+		-e TEST_FILTER="$(TEST_FILTER)" \
+		age-store-ci-ubuntu24
 
 arch:
 	@echo "=== Building Arch Linux CI Docker image ==="
@@ -32,4 +41,4 @@ alpine:
 		-e TEST_FILTER="$(TEST_FILTER)" \
 		age-store-ci-alpine
 
-all: ubuntu arch alpine
+all: ubuntu-22 ubuntu-24 arch alpine
