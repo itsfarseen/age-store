@@ -11,6 +11,29 @@ permissions:
   contents: write
 
 jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    name: Code Quality (Black & MyPy)
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black mypy
+        
+    - name: Check formatting with Black
+      run: black --check --diff age-store.py
+      
+    - name: Type check with MyPy
+      run: mypy --check-untyped-defs age-store.py
+
   test-ubuntu-22:
     runs-on: ubuntu-latest
     name: Test on Ubuntu 22.04 (Docker)
@@ -54,7 +77,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     name: Create Release
-    needs: [test-ubuntu-22, test-ubuntu-24, test-archlinux, test-alpine]
+    needs: [lint-and-typecheck, test-ubuntu-22, test-ubuntu-24, test-archlinux, test-alpine]
     
     steps:
     - uses: actions/checkout@v4
