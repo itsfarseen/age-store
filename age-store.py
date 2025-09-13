@@ -587,6 +587,7 @@ def cmd_init_user(unencrypted: bool):
     # Encrypted user secret
     try:
         # Write plaintext private key to temp file
+        assert temp_file is not None  # Should never be None in encrypted mode
         temp_file.parent.mkdir(parents=True, exist_ok=True)
         with open(temp_file, "w") as f:
             f.write(user_private_key)
@@ -651,7 +652,10 @@ def cmd_list_store():
 
 
 def launch_shell_with_prompt(
-    shell: str, prompt: str = None, args: list[str] = None, env: dict = None
+    shell: str,
+    prompt: str | None = None,
+    args: list[str] | None = None,
+    env: dict | None = None,
 ):
     """Launch shell with optionally modified prompt.
 
@@ -724,11 +728,11 @@ end"""
 
 def cmd_env_shell(
     env_file_path: str,
-    shell: str = None,
-    args: list[str] = None,
-    hook: str = None,
+    shell: str | None = None,
+    args: list[str] | None = None,
+    hook: str | None = None,
     no_prompt: bool = False,
-    custom_prompt: str = None,
+    custom_prompt: str | None = None,
 ):
     """Launch shell with environment variables loaded from secrets."""
     env_file = Path(env_file_path)
@@ -832,7 +836,7 @@ def cmd_env_shell(
             sys.exit(1)
 
     # Determine shell to use
-    user_shell = shell or os.environ.get("SHELL", "/bin/sh")
+    user_shell = shell if shell is not None else os.environ.get("SHELL", "/bin/sh")
 
     # Prepare environment with loaded secrets
     new_env = os.environ.copy()
