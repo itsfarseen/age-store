@@ -416,7 +416,7 @@ $. age-store.py --user-secret user-secrets/user1.age add secret2.txt
 .. FOO=secret1.txt
 .. BAR=secret2.txt
 # Test env-shell with printenv
-$. age-store.py --user-secret user-secrets/user1.age env-shell test.env --shell /bin/sh -- -c 'printenv FOO BAR'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --shell /bin/bash test.env -- -c 'printenv FOO BAR'
 ?. stdout
 .. secret_value_1
 .. secret_value_2
@@ -443,7 +443,7 @@ $. age-store.py --user-secret user-secrets/user1.age add secret2.txt
 .. echo "SECRET_COUNT=$(echo "$FOO $BAR" | wc -w)"
 $. chmod +x "test-hook.sh"
 # Test env-shell with hook that computes values from existing secrets
-$. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./test-hook.sh --shell /bin/sh -- -c 'printenv FOO BAR HOOK_VAR COMBINED_SECRETS SECRET_COUNT'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --hook ./test-hook.sh --shell /bin/bash test.env -- -c 'printenv FOO BAR HOOK_VAR COMBINED_SECRETS SECRET_COUNT'
 ?. stdout
 .. secret_value_1
 .. secret_value_2
@@ -467,7 +467,7 @@ $. age-store.py --user-secret user-secrets/user1.age add secret1.txt
 .. exit 1
 $. chmod +x "failing-hook.sh"
 # Test that hook failure causes env-shell to fail
-$! age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./failing-hook.sh
+$! age-store.py --user-secret user-secrets/user1.age env-shell --hook ./failing-hook.sh test.env 
 ?. stderr "Hook script exited with code 1"
 
 > Env Shell Hook Nonexistent Script
@@ -479,7 +479,7 @@ $. age-store.py --user-secret user-secrets/user1.age add secret1.txt
 :. file "test.env"
 .. FOO=secret1.txt
 # Test with nonexistent hook script
-$! age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./nonexistent-hook.sh
+$! age-store.py --user-secret user-secrets/user1.age env-shell --hook ./nonexistent-hook.sh test.env
 ?. stderr "Hook script not found"
 
 > Env Shell Hook Invalid Output Format
@@ -500,7 +500,7 @@ $. age-store.py --user-secret user-secrets/user1.age add secret1.txt
 .. echo "=empty_name"
 $. chmod +x "invalid-hook.sh"
 # Test that hook with invalid lines still works for valid lines
-$. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook ./invalid-hook.sh --shell /bin/sh -- -c 'printenv FOO VALID_VAR ANOTHER_VALID'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --hook ./invalid-hook.sh --shell /bin/bash test.env -- -c 'printenv FOO VALID_VAR ANOTHER_VALID'
 ?. stdout
 .. secret_value_1
 .. valid_value
@@ -514,7 +514,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell test.env --hook .
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with default prompt in bash
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --shell /bin/bash -- -ic 'printenv PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --shell /bin/bash prompt-test.env -- -ic 'printenv PS1'
 ?. stdout "(age-store:prompt-test)"
 
 > Env Shell Default Prompt Fish
@@ -523,7 +523,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with default prompt in fish
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --shell /usr/bin/fish -- -c fish_prompt
+$. age-store.py --user-secret user-secrets/user1.age env-shell --shell /usr/bin/fish prompt-test.env -- -c fish_prompt
 ?. stdout "(age-store:prompt-test)"
 
 > Env Shell No Prompt
@@ -532,7 +532,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with --no-prompt option
-$! age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --no-prompt --shell /bin/bash -- -ic 'printenv PS1'
+$! age-store.py --user-secret user-secrets/user1.age env-shell --no-prompt --shell /bin/bash prompt-test.env -- -ic 'printenv PS1'
 ?! stdout "(age-store:prompt-test)"
 
 > Env Shell Custom Prompt
@@ -541,7 +541,7 @@ $! age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 :. file "prompt-test.env"
 .. # Empty env file for testing prompt
 # Test env-shell with custom prompt
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --custom-prompt "myapp" --shell /bin/bash -- -ic 'printenv PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --custom-prompt "myapp" --shell /bin/bash prompt-test.env -- -ic 'printenv PS1'
 ?. stdout "(myapp)"
 ?! stdout "(age-store:prompt-test)"
 
@@ -556,7 +556,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 .. echo "AGE_STORE_PROMPT=hook-env"
 $. chmod +x "prompt-hook.sh"
 # Test env-shell with AGE_STORE_PROMPT from hook
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --hook ./prompt-hook.sh --shell /bin/bash -- -ic 'printenv PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --hook ./prompt-hook.sh --shell /bin/bash prompt-test.env -- -ic 'printenv PS1'
 ?. stdout "(hook-env)"
 ?! stdout "(age-store:prompt-test)"
 
@@ -571,7 +571,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 .. echo "AGE_STORE_PROMPT=hook-env"
 $. chmod +x "prompt-hook2.sh"
 # Test that --custom-prompt overrides AGE_STORE_PROMPT from hook (CLI has highest precedence)
-$. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env --custom-prompt "cli-prompt" --hook ./prompt-hook2.sh --shell /bin/bash -- -ic 'printenv PS1'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --custom-prompt "cli-prompt" --hook ./prompt-hook2.sh --shell /bin/bash prompt-test.env -- -ic 'printenv PS1'
 ?. stdout "(cli-prompt)"
 ?! stdout "(hook-env)"
 ?! stdout "(age-store:prompt-test)"
@@ -582,7 +582,7 @@ $. age-store.py --user-secret user-secrets/user1.age env-shell prompt-test.env -
 :. file "test-env-var.env"
 .. # Test env file for AGE_STORE_ENV
 # Test that AGE_STORE_ENV is set to the env file path
-$. age-store.py --user-secret user-secrets/user1.age env-shell test-env-var.env --shell /bin/bash -- -c 'printenv AGE_STORE_ENV'
+$. age-store.py --user-secret user-secrets/user1.age env-shell --shell /bin/bash test-env-var.env -- -c 'printenv AGE_STORE_ENV'
 ?. stdout 
 .. test-env-var.env
 ..

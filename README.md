@@ -218,6 +218,10 @@ make -C tests/docker all TEST_FILTER="test name"
 
 The test suite validates all functionality across multiple Linux distributions to ensure compatibility.
 
+## Known Issues
+
+See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for platform-specific compatibility issues.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
