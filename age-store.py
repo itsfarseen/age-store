@@ -13,7 +13,7 @@ from pathlib import Path
 from shutil import which
 
 # Constants
-VERSION = 0.6
+VERSION = 0.7
 AGE_REPO_URL = "https://github.com/FiloSottile/age"
 STORE_DIR = Path("store")
 USERS_CONFIG_FILE = Path("users.json")
@@ -794,9 +794,10 @@ def cmd_env_shell(
     # Execute hook if provided
     if hook:
         try:
-            # Execute hook with current environment + loaded secrets
+            # Execute hook with current environment + loaded secrets + AGE_STORE_ENV
             hook_env = os.environ.copy()
             hook_env.update(env_vars)
+            hook_env["AGE_STORE_ENV"] = env_file_path
 
             result = subprocess.run(
                 [hook], stdout=subprocess.PIPE, text=True, env=hook_env
@@ -841,9 +842,6 @@ def cmd_env_shell(
     # Prepare environment with loaded secrets
     new_env = os.environ.copy()
     new_env.update(env_vars)
-
-    # Add AGE_STORE_ENV variable pointing to the env file
-    new_env["AGE_STORE_ENV"] = env_file_path
 
     # Determine prompt to use (CLI custom prompt has highest precedence)
     prompt_text = None

@@ -2,6 +2,11 @@
 
 ## (Unreleased)
 
+## 0.7 (2025-09-14)
+
+**Bug fixes**
+- Fix `AGE_STORE_ENV` variable missing from hook scripts - now properly available to hook environment while removed from shell environment
+
 ## 0.6 (2025-09-13)
 
 **Bug fixes**
