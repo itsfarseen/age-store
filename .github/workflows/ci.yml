@@ -116,9 +116,13 @@ jobs:
         print(f"Changelog version: {changelog_version}")
         
         # Check if git tag exists for this version
-        _, _, tag_returncode = run_cmd(["git", "rev-parse", f"v{version}"])
+        tag_stdout, tag_stderr, tag_returncode = run_cmd(["git", "rev-parse", f"v{version}"])
         git_tag_exists = tag_returncode == 0
         print(f"Git tag v{version} exists: {git_tag_exists}")
+        if not git_tag_exists:
+            print(f"git rev-parse stdout: {tag_stdout}")
+            print(f"git rev-parse stderr: {tag_stderr}")
+            print(f"git rev-parse return code: {tag_returncode}")
         
         # Check version consistency
         if version != changelog_version or not git_tag_exists:
